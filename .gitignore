@@ -1,0 +1,10 @@
+# Xmake cache
+.xmake/
+build/
+.cache/
+
+# MacOS Cache
+.DS_Store
+
+
+XMAKE_CHEATSHEET.md
