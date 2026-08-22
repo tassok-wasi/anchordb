@@ -1,6 +1,0 @@
-[
-{
-  "directory": "/home/tassok/anchor",
-  "arguments": ["/usr/bin/g++", "-c", "-m64", "-fPIC", "-g", "-O0", "-std=c++23", "-Iinclude", "-o", "build/.objs/anchor/linux/x86_64/debug/src/demo.cc.o", "src/demo.cc"],
-  "file": "src/demo.cc"
-}]

@@ -6,5 +6,3 @@ build/
 # MacOS Cache
 .DS_Store
 
-
-XMAKE_CHEATSHEET.md
