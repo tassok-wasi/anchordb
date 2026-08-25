@@ -13,64 +13,78 @@
 // limitations under the License.
 
 #pragma once
+#include <anchordb/macro.h>
 
+#ifdef SWMR_MEMTABLE_SKIPLIST
 #include "arena.h"
-#include "skiplist.h"
 #include <algorithm>
 #include <atomic>
 #include <cassert>
 #include <functional>
-#include <new>
 #include <random>
+#endif
 
 namespace anchordb {
 
+#ifdef SWMR_MEMTABLE_SKIPLIST
+
 template <typename Key, typename Value, typename Comparator = std::less<Key>>
-class SWMR_SkipList : public SkipList<Key, Value, Comparator> {
+class Skiplist {
   private:
     struct Node {
-        Key const key;
-        Value const value;
-        int const level;
-        std::atomic<Node *> forward[1];
+        Key const key_;
+        Value const value_;
+        int const level_;
+        std::atomic<Node *> forward_[1];
 
         Node(const Key &k, const Value &v, int lvl)
-            : key(k), value(v), level(lvl) {
+            : key_(k), value_(v), level_(lvl) {
             for (int i = 0; i <= lvl; ++i) {
-                forward[i].store(nullptr, std::memory_order_relaxed);
+                forward_[i].store(nullptr, std::memory_order_relaxed);
             }
         }
 
         Node(const Key &k, Value &&v, int lvl)
-            : key(k), value(std::move(v)), level(lvl) {
+            : key_(k), value_(std::move(v)), level_(lvl) {
             for (int i = 0; i <= lvl; ++i) {
-                forward[i].store(nullptr, std::memory_order_relaxed);
+                forward_[i].store(nullptr, std::memory_order_relaxed);
             }
         }
+
+        ~Node() = default;
     };
 
   public:
-    using Base = SkipList<Key, Value, Comparator>;
-
-    explicit SWMR_SkipList(Comparator cmp, Arena *arena)
-        : Base(cmp, arena), curr_level_{0} {
-        head_ = new_node(Key{}, Value{}, Base::max_level_);
+    explicit Skiplist(Comparator cmp, Arena *arena)
+        : cmp_(cmp), arena_(arena), gen_(std::random_device{}()),
+          dist_(prob_factor_), curr_level_{0} {
+        head_ = new_node_(Key{}, Value{}, max_level_);
+        for (int i = 0; i <= max_level_; ++i) {
+            head_->forward_[i].store(nullptr, std::memory_order_relaxed);
+        }
     }
 
-    ~SWMR_SkipList() override { clear(); }
+    ~Skiplist() { clear_(); }
 
-    SWMR_SkipList(const SWMR_SkipList &) = delete;
-    SWMR_SkipList &operator=(const SWMR_SkipList &) = delete;
+    Skiplist(const Skiplist &) = delete;
+    Skiplist &operator=(const Skiplist &) = delete;
 
-    SWMR_SkipList(SWMR_SkipList &&other) noexcept
-        : Base(std::move(other)), curr_level_{other.curr_level_.load()} {
+    Skiplist(Skiplist &&other) noexcept
+        : cmp_(std::move(other.cmp_)), arena_(std::move(other.arena_)),
+          gen_(std::move(other.gen_)), dist_(std::move(other.dist_)),
+          curr_level_{other.curr_level_.load()} {
         other.head_ = nullptr;
         other.curr_level_.store(0);
     }
 
-    SWMR_SkipList &operator=(SWMR_SkipList &&other) noexcept {
+    Skiplist &operator=(Skiplist &&other) noexcept {
         if (this != &other) {
-            Base::operator=(std::move(other));
+            clear_();
+
+            cmp_ = std::move(other.cmp_);
+            arena_ = std::move(other.arena_);
+            gen_ = std::move(other.gen_);
+            dist_ = std::move(other.dist_);
             curr_level_.store(other.curr_level_.load());
             other.head_ = nullptr;
             other.curr_level_.store(0);
@@ -78,35 +92,38 @@ class SWMR_SkipList : public SkipList<Key, Value, Comparator> {
         return *this;
     }
 
-    void insert(const Key &key, const Value &value) override;
-    void insert(const Key &key, Value &&value) override;
+    void insert(const Key &key, const Value &value);
+    void insert(const Key &key, Value &&value);
 
-    bool contains(const Key &key) const override;
+    bool contains(const Key &key) const;
 
-    class Iterator : public Base::Iterator {
+    class Iterator {
       public:
-        explicit Iterator(const SWMR_SkipList *list)
+        explicit Iterator(const Skiplist *list)
             : list_(list),
-              node_(list_->head_->forward[0].load(std::memory_order_acquire)) {}
-
-        bool valid() const override { return node_ != nullptr; }
-
-        const Key &key() const override {
-            assert(valid());
-            return node_->key;
+              node_(list_->head_->forward_[0].load(std::memory_order_acquire)) {
         }
 
-        const Value &value() const override {
+        ~Iterator() = default;
+
+        bool valid() const { return node_ != nullptr; }
+
+        const Key &key() const {
             assert(valid());
-            return node_->value;
+            return node_->key_;
         }
 
-        void next() override {
+        const Value &value() const {
             assert(valid());
-            node_ = node_->forward[0].load(std::memory_order_acquire);
+            return node_->value_;
         }
 
-        void prev() override {
+        void next() {
+            assert(valid());
+            node_ = node_->forward_[0].load(std::memory_order_acquire);
+        }
+
+        void prev() {
             assert(valid());
             if (node_ == list_->head_) {
                 node_ = nullptr;
@@ -115,148 +132,162 @@ class SWMR_SkipList : public SkipList<Key, Value, Comparator> {
             Node *curr = list_->head_;
             int max_lvl = list_->curr_level_.load(std::memory_order_acquire);
             for (int i = max_lvl; i >= 0; --i) {
-                Node *next = curr->forward[i].load(std::memory_order_acquire);
-                while (next != nullptr && list_->less(next->key, node_->key)) {
+                Node *next = curr->forward_[i].load(std::memory_order_acquire);
+                while (next != nullptr &&
+                       list_->less_(next->key_, node_->key_)) {
                     curr = next;
-                    next = curr->forward[i].load(std::memory_order_acquire);
+                    next = curr->forward_[i].load(std::memory_order_acquire);
                 }
             }
             node_ = (curr == list_->head_) ? nullptr : curr;
         }
 
-        void seek(const Key &target) override {
-            node_ = list_->find_greater_or_equal(target);
+        void seek(const Key &target) {
+            node_ = list_->find_greater_or_equal_(target);
         }
 
-        void seek_to_first() override {
-            node_ = list_->head_->forward[0].load(std::memory_order_acquire);
+        void seek_to_first() {
+            node_ = list_->head_->forward_[0].load(std::memory_order_acquire);
         }
 
-        void seek_to_last() override {
-            node_ = list_->find_last();
+        void seek_to_last() {
+            node_ = list_->find_last_();
             if (node_ == list_->head_) {
                 node_ = nullptr;
             }
         }
 
       private:
-        const SWMR_SkipList *list_;
+        const Skiplist *list_;
         Node *node_;
     };
 
   private:
-    int random_level() override;
-    void clear() override;
-    Node *new_node(const Key &key, const Value &value, int level);
-    Node *new_node(const Key &key, Value &&value, int level);
+    int random_level_();
+    void clear_();
+    Node *new_node_(const Key &key, const Value &value, int level);
+    Node *new_node_(const Key &key, Value &&value, int level);
 
-    Node *find_greater_or_equal(const Key &key) const;
-    Node *find_last() const;
+    Node *find_greater_or_equal_(const Key &key) const;
+    Node *find_last_() const;
+
+    bool less_(const Key &a, const Key &b) const { return cmp_(a, b); }
+    bool equal_(const Key &a, const Key &b) const {
+        return !cmp_(a, b) && !cmp_(b, a);
+    }
+
+    int max_level_ = 12;
+    float prob_factor_ = 0.5f;
 
     std::atomic<int> curr_level_;
     Node *head_;
+
+    Arena *arena_;
+    Comparator cmp_;
+
+    std::mt19937 gen_;
+    std::bernoulli_distribution dist_;
 };
 
 template <typename Key, typename Value, typename Comparator>
-int SWMR_SkipList<Key, Value, Comparator>::random_level() {
+int Skiplist<Key, Value, Comparator>::random_level_() {
     int lvl = 0;
-    while (dist_(Base::gen_) && lvl < Base::max_level_) {
+    while (dist_(gen_) && lvl < max_level_) {
         lvl++;
     }
     return lvl;
 }
 
 template <typename Key, typename Value, typename Comparator>
-void SWMR_SkipList<Key, Value, Comparator>::clear() {
+void Skiplist<Key, Value, Comparator>::clear_() {
     if (!head_)
         return;
-    Node *curr = head_->forward[0].load(std::memory_order_relaxed);
+    Node *curr = head_->forward_[0].load(std::memory_order_relaxed);
     while (curr != nullptr) {
-        Node *next = curr->forward[0].load(std::memory_order_relaxed);
+        Node *next = curr->forward_[0].load(std::memory_order_relaxed);
         curr->~Node();
         curr = next;
     }
-    for (int i = 0; i <= Base::max_level_; ++i) {
-        head_->forward[i].store(nullptr, std::memory_order_relaxed);
+    for (int i = 0; i <= max_level_; ++i) {
+        head_->forward_[i].store(nullptr, std::memory_order_relaxed);
     }
     curr_level_.store(0, std::memory_order_relaxed);
 }
 
 // default copy overload
 template <typename Key, typename Value, typename Comparator>
-typename SWMR_SkipList<Key, Value, Comparator>::Node *
-SWMR_SkipList<Key, Value, Comparator>::new_node(const Key &key,
-                                                const Value &value, int level) {
+typename Skiplist<Key, Value, Comparator>::Node *
+Skiplist<Key, Value, Comparator>::new_node_(const Key &key, const Value &value,
+                                            int level) {
     size_t mem_size = sizeof(Node) + sizeof(std::atomic<Node *>) * level;
-    char *node_mem = Base::arena_->allocate_aligned(mem_size);
+    char *node_mem = arena_->allocate_aligned(mem_size);
     return new (node_mem) Node(key, value, level);
 }
 
 // move overload
 template <typename Key, typename Value, typename Comparator>
-typename SWMR_SkipList<Key, Value, Comparator>::Node *
-SWMR_SkipList<Key, Value, Comparator>::new_node(const Key &key, Value &&value,
-                                                int level) {
+typename Skiplist<Key, Value, Comparator>::Node *
+Skiplist<Key, Value, Comparator>::new_node_(const Key &key, Value &&value,
+                                            int level) {
     size_t mem_size = sizeof(Node) + sizeof(std::atomic<Node *>) * level;
-    char *node_mem = Base::arena_->allocate_aligned(mem_size);
+    char *node_mem = arena_->allocate_aligned(mem_size);
     return new (node_mem) Node(key, std::move(value), level);
 }
 
 template <typename Key, typename Value, typename Comparator>
-typename SWMR_SkipList<Key, Value, Comparator>::Node *
-SWMR_SkipList<Key, Value, Comparator>::find_greater_or_equal(
-    const Key &key) const {
+typename Skiplist<Key, Value, Comparator>::Node *
+Skiplist<Key, Value, Comparator>::find_greater_or_equal_(const Key &key) const {
     Node *curr = head_;
     int max_lvl = curr_level_.load(std::memory_order_acquire);
 
     for (int i = max_lvl; i >= 0; --i) {
-        Node *next = curr->forward[i].load(std::memory_order_acquire);
-        while (next != nullptr && Base::less(next->key, key)) {
+        Node *next = curr->forward_[i].load(std::memory_order_acquire);
+        while (next != nullptr && less_(next->key_, key)) {
             curr = next;
-            next = curr->forward[i].load(std::memory_order_acquire);
+            next = curr->forward_[i].load(std::memory_order_acquire);
         }
     }
-    return curr->forward[0].load(std::memory_order_acquire);
+    return curr->forward_[0].load(std::memory_order_acquire);
 }
 
 template <typename Key, typename Value, typename Comparator>
-typename SWMR_SkipList<Key, Value, Comparator>::Node *
-SWMR_SkipList<Key, Value, Comparator>::find_last() const {
+typename Skiplist<Key, Value, Comparator>::Node *
+Skiplist<Key, Value, Comparator>::find_last_() const {
     Node *curr = head_;
     int max_lvl = curr_level_.load(std::memory_order_acquire);
 
     for (int i = max_lvl; i >= 0; --i) {
-        Node *next = curr->forward[i].load(std::memory_order_acquire);
+        Node *next = curr->forward_[i].load(std::memory_order_acquire);
         while (next != nullptr) {
             curr = next;
-            next = curr->forward[i].load(std::memory_order_acquire);
+            next = curr->forward_[i].load(std::memory_order_acquire);
         }
     }
     return curr;
 }
 
 template <typename Key, typename Value, typename Comparator>
-void SWMR_SkipList<Key, Value, Comparator>::insert(const Key &key,
-                                                   const Value &value) {
-    Node *update[Base::max_level_ + 1];
+void Skiplist<Key, Value, Comparator>::insert(const Key &key,
+                                              const Value &value) {
+    Node *update[max_level_ + 1];
     Node *curr = head_;
     int max_lvl = curr_level_.load(std::memory_order_relaxed);
 
     for (int i = max_lvl; i >= 0; --i) {
-        Node *next = curr->forward[i].load(std::memory_order_relaxed);
-        while (next != nullptr && Base::less(next->key, key)) {
+        Node *next = curr->forward_[i].load(std::memory_order_relaxed);
+        while (next != nullptr && less_(next->key_, key)) {
             curr = next;
-            next = curr->forward[i].load(std::memory_order_relaxed);
+            next = curr->forward_[i].load(std::memory_order_relaxed);
         }
         update[i] = curr;
     }
 
-    curr = curr->forward[0].load(std::memory_order_relaxed);
-    if (curr != nullptr && Base::equal(curr->key, key)) {
+    curr = curr->forward_[0].load(std::memory_order_relaxed);
+    if (curr != nullptr && equal_(curr->key_, key)) {
         return; // Key already present
     }
 
-    int new_level = random_level();
+    int new_level = random_level_();
     if (new_level > max_lvl) {
         for (int i = max_lvl + 1; i <= new_level; ++i) {
             update[i] = head_;
@@ -264,41 +295,40 @@ void SWMR_SkipList<Key, Value, Comparator>::insert(const Key &key,
         curr_level_.store(new_level, std::memory_order_release);
     }
 
-    Node *x = new_node(key, value, new_level);
+    Node *x = new_node_(key, value, new_level);
 
     for (int i = 0; i <= new_level; ++i) {
-        x->forward[i].store(
-            update[i]->forward[i].load(std::memory_order_relaxed),
+        x->forward_[i].store(
+            update[i]->forward_[i].load(std::memory_order_relaxed),
             std::memory_order_relaxed);
     }
 
     for (int i = 0; i <= new_level; ++i) {
-        update[i]->forward[i].store(x, std::memory_order_release);
+        update[i]->forward_[i].store(x, std::memory_order_release);
     }
 }
 
 template <typename Key, typename Value, typename Comparator>
-void SWMR_SkipList<Key, Value, Comparator>::insert(const Key &key,
-                                                   Value &&value) {
-    Node *update[Base::max_level_ + 1];
+void Skiplist<Key, Value, Comparator>::insert(const Key &key, Value &&value) {
+    Node *update[max_level_ + 1];
     Node *curr = head_;
     int max_lvl = curr_level_.load(std::memory_order_relaxed);
 
     for (int i = max_lvl; i >= 0; --i) {
-        Node *next = curr->forward[i].load(std::memory_order_relaxed);
-        while (next != nullptr && Base::less(next->key, key)) {
+        Node *next = curr->forward_[i].load(std::memory_order_relaxed);
+        while (next != nullptr && less_(next->key_, key)) {
             curr = next;
-            next = curr->forward[i].load(std::memory_order_relaxed);
+            next = curr->forward_[i].load(std::memory_order_relaxed);
         }
         update[i] = curr;
     }
 
-    curr = curr->forward[0].load(std::memory_order_relaxed);
-    if (curr != nullptr && Base::equal(curr->key, key)) {
+    curr = curr->forward_[0].load(std::memory_order_relaxed);
+    if (curr != nullptr && equal_(curr->key_, key)) {
         return; // Key already present
     }
 
-    int new_level = random_level();
+    int new_level = random_level_();
     if (new_level > max_lvl) {
         for (int i = max_lvl + 1; i <= new_level; ++i) {
             update[i] = head_;
@@ -306,23 +336,25 @@ void SWMR_SkipList<Key, Value, Comparator>::insert(const Key &key,
         curr_level_.store(new_level, std::memory_order_release);
     }
 
-    Node *x = new_node(key, std::move(value), new_level);
+    Node *x = new_node_(key, std::move(value), new_level);
 
     for (int i = 0; i <= new_level; ++i) {
-        x->forward[i].store(
-            update[i]->forward[i].load(std::memory_order_relaxed),
+        x->forward_[i].store(
+            update[i]->forward_[i].load(std::memory_order_relaxed),
             std::memory_order_relaxed);
     }
 
     for (int i = 0; i <= new_level; ++i) {
-        update[i]->forward[i].store(x, std::memory_order_release);
+        update[i]->forward_[i].store(x, std::memory_order_release);
     }
 }
 
 template <typename Key, typename Value, typename Comparator>
-bool SWMR_SkipList<Key, Value, Comparator>::contains(const Key &key) const {
-    Node *x = find_greater_or_equal(key);
-    return x != nullptr && Base::equal(key, x->key);
+bool Skiplist<Key, Value, Comparator>::contains(const Key &key) const {
+    Node *x = find_greater_or_equal_(key);
+    return x != nullptr && equal_(key, x->key_);
 }
+
+#endif
 
 } // namespace anchordb

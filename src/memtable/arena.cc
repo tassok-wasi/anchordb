@@ -15,6 +15,7 @@
 #include "arena.h"
 #include <cassert>
 #include <cstddef>
+#include <cstdint>
 
 namespace anchordb {
 
@@ -68,7 +69,7 @@ char *Arena::allocate_fallback(size_t bytes) {
         return block;
     }
 
-    alloc_ptr_ = allocate_new_block(bytes);
+    alloc_ptr_ = allocate_new_block(k_block_size);
     alloc_bytes_remaining_ = k_block_size;
 
     char *block = alloc_ptr_;

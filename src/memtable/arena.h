@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include <atomic>
 #include <cstddef>
 #include <vector>
 
@@ -32,7 +31,7 @@ class Arena {
     char *allocate(size_t bytes);
     char *allocate_aligned(size_t bytes);
 
-    size_t memory_usage() { return memory_usage_; }
+    size_t memory_usage() const { return memory_usage_; }
 
   private:
     char *allocate_fallback(size_t bytes);
