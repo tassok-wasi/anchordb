@@ -19,8 +19,6 @@
 
 namespace anchordb {
 
-// static const int k_block_size = 4096;
-
 Arena::Arena(const uint32_t block_size)
     : k_block_size_(block_size), alloc_ptr_{nullptr}, alloc_bytes_remaining_{0},
       memory_usage_{0} {}
