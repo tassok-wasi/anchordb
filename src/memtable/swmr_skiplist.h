@@ -24,11 +24,8 @@
 #include <cassert>
 #include <functional>
 #include <random>
-#endif
 
 namespace anchordb {
-
-#ifdef SWMR_MEMTABLE_SKIPLIST
 
 template <typename Comparator = std::less<KeyType>> class Skiplist {
   private:
@@ -290,6 +287,6 @@ bool Skiplist<Comparator>::contains(const KeyType &key) const {
     return x != nullptr && equal_(key, x->key_);
 }
 
-#endif
-
 } // namespace anchordb
+
+#endif

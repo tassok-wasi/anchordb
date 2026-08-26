@@ -14,22 +14,19 @@
 
 #pragma once
 
-#include "anchordb/slice.h"
-#include "struct.h"
 #include <anchordb/macro.h>
 
 #ifdef MWMR_MEMTABLE_SKIPLIST
+#include "anchordb/slice.h"
 #include "arena.h"
+#include "struct.h"
 #include <algorithm>
 #include <atomic>
 #include <cassert>
 #include <functional>
 #include <random>
-#endif
 
 namespace anchordb {
-
-#ifdef MWMR_MEMTABLE_SKIPLIST
 
 template <typename Comparator = std::less<KeyType>> class Skiplist {
   private:
@@ -348,6 +345,6 @@ bool Skiplist<Comparator>::contains(const KeyType &key) const {
     return x != nullptr && equal_(key, x->key_);
 }
 
-#endif
-
 } // namespace anchordb
+
+#endif
