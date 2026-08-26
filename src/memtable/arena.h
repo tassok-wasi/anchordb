@@ -15,13 +15,14 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <vector>
 
 namespace anchordb {
 
 class Arena {
   public:
-    explicit Arena();
+    explicit Arena(const uint32_t block_size);
 
     ~Arena();
 
@@ -40,6 +41,7 @@ class Arena {
     char *alloc_ptr_;
     size_t alloc_bytes_remaining_;
     std::vector<char *> blocks_;
+    const uint32_t k_block_size_ = 4096;
 
     size_t memory_usage_;
 };

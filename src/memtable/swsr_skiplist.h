@@ -16,7 +16,9 @@
 #include <anchordb/macro.h>
 
 #ifdef SWSR_MEMTABLE_SKIPLIST
+#include "anchordb/slice.h"
 #include "arena.h"
+#include "struct.h"
 #include <algorithm>
 #include <cassert>
 #include <functional>
@@ -27,20 +29,16 @@ namespace anchordb {
 
 #ifdef SWSR_MEMTABLE_SKIPLIST
 
-template <typename Key, typename Value, typename Comparator = std::less<Key>>
-class Skiplist {
+template <typename Comparator = std::less<KeyType>> class Skiplist {
   private:
     struct Node {
-        Key const key_;
-        Value const value_;
-        int const level_;
+        const KeyType key_;
+        const Slice value_;
+        const int level_;
         Node *forward_[1];
 
-        Node(const Key &k, const Value &v, int lvl)
+        Node(const KeyType &k, const Slice &v, int lvl)
             : key_(k), value_(v), level_(lvl) {}
-
-        Node(const Key &k, Value &&v, int lvl)
-            : key_(k), value_(std::move(v)), level_(lvl) {}
 
         ~Node() = default;
     };
@@ -49,7 +47,7 @@ class Skiplist {
     explicit Skiplist(Comparator cmp, Arena *arena)
         : cmp_(cmp), arena_(arena), gen_(std::random_device{}()),
           dist_(prob_factor_), curr_level_{0} {
-        head_ = new_node_(Key{}, Value{}, max_level_);
+        head_ = new_node_(KeyType{}, Slice{}, max_level_);
         for (int i = 0; i <= max_level_; ++i) {
             head_->forward_[i] = nullptr;
         }
@@ -85,9 +83,8 @@ class Skiplist {
         return *this;
     }
 
-    void insert(const Key &key, const Value &value);
-    void insert(const Key &key, Value &&value);
-    bool contains(const Key &key) const;
+    void insert(const KeyType &key, const Slice &value);
+    bool contains(const KeyType &key) const;
 
     class Iterator {
       public:
@@ -98,12 +95,12 @@ class Skiplist {
 
         bool valid() const { return node_ != nullptr; }
 
-        const Key &key() const {
+        const KeyType &key() const {
             assert(valid());
             return node_->key_;
         }
 
-        const Value &value() const {
+        const Slice &value() const {
             assert(valid());
             return node_->value_;
         }
@@ -122,14 +119,14 @@ class Skiplist {
             Node *curr = list_->head_;
             for (int i = list_->curr_level_; i >= 0; --i) {
                 while (curr->forward_[i] != nullptr &&
-                       list_->less_(curr->forward_[i]->key, node_->key_)) {
+                       list_->less_(curr->forward_[i]->key_, node_->key_)) {
                     curr = curr->forward_[i];
                 }
             }
             node_ = (curr == list_->head_) ? nullptr : curr;
         }
 
-        void seek(const Key &target) {
+        void seek(const KeyType &target) {
             node_ = list_->find_greater_or_equal_(target);
         }
 
@@ -150,14 +147,13 @@ class Skiplist {
   private:
     int random_level_();
     void clear_();
-    Node *new_node_(const Key &key, const Value &value, int level);
-    Node *new_node_(const Key &key, Value &&value, int level);
+    Node *new_node_(const KeyType &key, const Slice &value, int level);
 
-    Node *find_greater_or_equal_(const Key &key) const;
+    Node *find_greater_or_equal_(const KeyType &key) const;
     Node *find_last_() const;
 
-    bool less_(const Key &a, const Key &b) const { return cmp_(a, b); }
-    bool equal_(const Key &a, const Key &b) const {
+    bool less_(const KeyType &a, const KeyType &b) const { return cmp_(a, b); }
+    bool equal_(const KeyType &a, const KeyType &b) const {
         return !cmp_(a, b) && !cmp_(b, a);
     }
 
@@ -174,8 +170,7 @@ class Skiplist {
     std::bernoulli_distribution dist_;
 };
 
-template <typename Key, typename Value, typename Comparator>
-int Skiplist<Key, Value, Comparator>::random_level_() {
+template <typename Comparator> int Skiplist<Comparator>::random_level_() {
     int lvl = 0;
     while (dist_(gen_) && lvl < max_level_) {
         lvl++;
@@ -183,8 +178,7 @@ int Skiplist<Key, Value, Comparator>::random_level_() {
     return lvl;
 }
 
-template <typename Key, typename Value, typename Comparator>
-void Skiplist<Key, Value, Comparator>::clear_() {
+template <typename Comparator> void Skiplist<Comparator>::clear_() {
     if (!head_)
         return;
     Node *curr = head_->forward_[0];
@@ -199,42 +193,30 @@ void Skiplist<Key, Value, Comparator>::clear_() {
     curr_level_ = 0;
 }
 
-// default copy overload
-template <typename Key, typename Value, typename Comparator>
-typename Skiplist<Key, Value, Comparator>::Node *
-Skiplist<Key, Value, Comparator>::new_node_(const Key &key, const Value &value,
-                                            int level) {
+template <typename Comparator>
+typename Skiplist<Comparator>::Node *
+Skiplist<Comparator>::new_node_(const KeyType &key, const Slice &value,
+                                int level) {
     size_t mem_size = sizeof(Node) + sizeof(Node *) * level;
     char *node_mem = arena_->allocate_aligned(mem_size);
     return new (node_mem) Node(key, value, level);
 }
 
-// Move overload
-template <typename Key, typename Value, typename Comparator>
-typename Skiplist<Key, Value, Comparator>::Node *
-Skiplist<Key, Value, Comparator>::new_node_(const Key &key, Value &&value,
-                                            int level) {
-    size_t mem_size = sizeof(Node) + sizeof(Node *) * level;
-    char *node_mem = arena_->allocate_aligned(mem_size);
-    return new (node_mem) Node(key, std::move(value), level);
-}
-
-template <typename Key, typename Value, typename Comparator>
-typename Skiplist<Key, Value, Comparator>::Node *
-Skiplist<Key, Value, Comparator>::find_greater_or_equal_(const Key &key) const {
+template <typename Comparator>
+typename Skiplist<Comparator>::Node *
+Skiplist<Comparator>::find_greater_or_equal_(const KeyType &key) const {
     Node *curr = head_;
     for (int i = curr_level_; i >= 0; --i) {
         while (curr->forward_[i] != nullptr &&
-               less_(curr->forward_[i]->key, key)) {
+               less_(curr->forward_[i]->key_, key)) {
             curr = curr->forward_[i];
         }
     }
     return curr->forward_[0];
 }
 
-template <typename Key, typename Value, typename Comparator>
-typename Skiplist<Key, Value, Comparator>::Node *
-Skiplist<Key, Value, Comparator>::find_last_() const {
+template <typename Comparator>
+typename Skiplist<Comparator>::Node *Skiplist<Comparator>::find_last_() const {
     Node *curr = head_;
     for (int i = curr_level_; i >= 0; --i) {
         while (curr->forward_[i] != nullptr) {
@@ -245,21 +227,20 @@ Skiplist<Key, Value, Comparator>::find_last_() const {
 }
 
 // default copy overload
-template <typename Key, typename Value, typename Comparator>
-void Skiplist<Key, Value, Comparator>::insert(const Key &key,
-                                              const Value &value) {
+template <typename Comparator>
+void Skiplist<Comparator>::insert(const KeyType &key, const Slice &value) {
     Node *update[max_level_ + 1];
     Node *curr = head_;
     for (int i = curr_level_; i >= 0; --i) {
         while (curr->forward_[i] != nullptr &&
-               less_(curr->forward_[i]->key, key)) {
+               less_(curr->forward_[i]->key_, key)) {
             curr = curr->forward_[i];
         }
         update[i] = curr;
     }
 
     curr = curr->forward_[0];
-    if (curr != nullptr && equal(curr->key_, key)) {
+    if (curr != nullptr && equal_(curr->key_, key)) {
         return; // Key already exists
     }
 
@@ -278,43 +259,10 @@ void Skiplist<Key, Value, Comparator>::insert(const Key &key,
     }
 }
 
-// Move overload
-template <typename Key, typename Value, typename Comparator>
-void Skiplist<Key, Value, Comparator>::insert(const Key &key, Value &&value) {
-    Node *update[max_level_ + 1];
-    Node *curr = head_;
-    for (int i = curr_level_; i >= 0; --i) {
-        while (curr->forward_[i] != nullptr &&
-               less(curr->forward_[i]->key, key)) {
-            curr = curr->forward_[i];
-        }
-        update[i] = curr;
-    }
-
-    curr = curr->forward_[0];
-    if (curr != nullptr && equal(curr->key_, key)) {
-        return; // Key already exists
-    }
-
-    int new_level = random_level_();
-    if (new_level > curr_level_) {
-        for (int i = curr_level_ + 1; i <= new_level; ++i) {
-            update[i] = head_;
-        }
-        curr_level_ = new_level;
-    }
-
-    Node *x = new_node_(key, std::move(value), new_level);
-    for (int i = 0; i <= new_level; ++i) {
-        x->forward_[i] = update[i]->forward_[i];
-        update[i]->forward_[i] = x;
-    }
-}
-
-template <typename Key, typename Value, typename Comparator>
-bool Skiplist<Key, Value, Comparator>::contains(const Key &key) const {
+template <typename Comparator>
+bool Skiplist<Comparator>::contains(const KeyType &key) const {
     Node *x = find_greater_or_equal_(key);
-    return x != nullptr && equal(key, x->key_);
+    return x != nullptr && equal_(key, x->key_);
 }
 
 #endif

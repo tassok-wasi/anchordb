@@ -19,10 +19,11 @@
 
 namespace anchordb {
 
-static const int k_block_size = 4096;
+// static const int k_block_size = 4096;
 
-Arena::Arena()
-    : alloc_ptr_{nullptr}, alloc_bytes_remaining_{0}, memory_usage_{0} {}
+Arena::Arena(const uint32_t block_size)
+    : k_block_size_(block_size), alloc_ptr_{nullptr}, alloc_bytes_remaining_{0},
+      memory_usage_{0} {}
 
 Arena::~Arena() {
     for (size_t i = 0; i < blocks_.size(); ++i) {
@@ -30,7 +31,7 @@ Arena::~Arena() {
     }
 }
 
-char *Arena::allocate(size_t bytes) {
+inline char *Arena::allocate(size_t bytes) {
     assert(bytes > 0);
     if (bytes <= alloc_bytes_remaining_) {
         char *block = alloc_ptr_;
@@ -64,13 +65,13 @@ char *Arena::allocate_aligned(size_t bytes) {
 }
 
 char *Arena::allocate_fallback(size_t bytes) {
-    if (bytes > k_block_size / 4) {
+    if (bytes > k_block_size_ / 4) {
         char *block = allocate_new_block(bytes);
         return block;
     }
 
-    alloc_ptr_ = allocate_new_block(k_block_size);
-    alloc_bytes_remaining_ = k_block_size;
+    alloc_ptr_ = allocate_new_block(k_block_size_);
+    alloc_bytes_remaining_ = k_block_size_;
 
     char *block = alloc_ptr_;
     alloc_ptr_ += bytes;
