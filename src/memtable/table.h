@@ -13,3 +13,63 @@
 // limitations under the License.
 
 #pragma once
+
+#include "anchordb/slice.h"
+#include "anchordb/status.h"
+#include "src/memtable/arena.h"
+#include "src/memtable/key.h"
+#include "src/memtable/skiplist.h"
+#include <anchordb/iterator.h>
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <string>
+
+namespace anchordb {
+
+class MemTableIterator {};
+
+class MemTable {
+  public:
+    explicit MemTable(const InternalKeyComparator &comparator,
+                      const uint32_t arena_block_size);
+
+    MemTable(const MemTable &) = delete;
+    MemTable &operator=(const MemTable &) = delete;
+
+    void ref() { ++refs_; }
+    void unref() {
+        --refs_;
+        assert(refs_ >= 0);
+        if (refs_ <= 0) {
+            delete this;
+        }
+    }
+
+    size_t approximate_memory_usage() const;
+    Iterator *new_iterator();
+
+    void add(SeqNum seq, ValueType type, const Slice &key, const Slice &value);
+    bool get(const LookUpKey &key, std::string *value, Status *s);
+
+  private:
+    friend class MemTableIterator;
+
+    struct KeyComparator {
+        const InternalKeyComparator comparator;
+        explicit KeyComparator(const InternalKeyComparator &c)
+            : comparator(c) {}
+        int operator()(const char *a, const char *b) const;
+    };
+
+    using Table = Skiplist<const char *, KeyComparator>;
+
+    ~MemTable();
+
+    KeyComparator comparator_;
+    int refs_;
+    Arena arena_;
+    Table table_;
+};
+
+} // namespace anchordb
