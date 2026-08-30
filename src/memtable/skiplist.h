@@ -17,26 +17,27 @@
 #include <anchordb/macro.h>
 
 #if defined(MWMR_MEMTABLE_SKIPLIST)
-    #include "mwmr_skiplist.h"
+#include "mwmr_skiplist.h"
 #elif defined(SWMR_MEMTABLE_SKIPLIST)
-    #include "swmr_skiplist.h"
+#include "swmr_skiplist.h"
 #elif defined(SWSR_MEMTABLE_SKIPLIST)
-    #include "swsr_skiplist.h"
+#include "swsr_skiplist.h"
 #else
-    #error "No memtable skiplist implementation selected. Define one of: MWMR_MEMTABLE_SKIPLIST, SWMR_MEMTABLE_SKIPLIST, or SWSR_MEMTABLE_SKIPLIST"
+#error                                                                         \
+    "No memtable skiplist implementation selected. Define one of: MWMR_MEMTABLE_SKIPLIST, SWMR_MEMTABLE_SKIPLIST, or SWSR_MEMTABLE_SKIPLIST"
 #endif
 
 namespace anchordb {
 
 #if defined(MWMR_MEMTABLE_SKIPLIST)
-    template <typename Key, typename Comparator>
-    using Skiplist = Skiplist_MWMR<Key, Comparator>;
+template <typename Key, class Comparator>
+using Skiplist = Skiplist_MWMR<Key, Comparator>;
 #elif defined(SWMR_MEMTABLE_SKIPLIST)
-    template <typename Key, typename Comparator>
-    using Skiplist = Skiplist_SWMR<Key, Comparator>;
+template <typename Key, class Comparator>
+using Skiplist = Skiplist_SWMR<Key, Comparator>;
 #elif defined(SWSR_MEMTABLE_SKIPLIST)
-    template <typename Key, typename Comparator>
-    using Skiplist = Skiplist_SWSR<Key, Comparator>;
+template <typename Key, class Comparator>
+using Skiplist = Skiplist_SWSR<Key, Comparator>;
 #endif
 
 } // namespace anchordb
