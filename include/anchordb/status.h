@@ -15,8 +15,100 @@
 #pragma once
 
 #include <anchordb/export.h>
+#include <anchordb/slice.h>
 
 namespace anchordb {
-class ANCHORDB_EXPORT Status {};
+class ANCHORDB_EXPORT Status {
+  public:
+    // Create a success status.
+    Status() noexcept : state_(nullptr) {}
+    ~Status() { delete[] state_; }
+
+    Status(const Status &rhs) {
+        state_ = (rhs.state_ == nullptr) ? nullptr : CopyState(rhs.state_);
+    }
+    Status &operator=(const Status &rhs) {
+        // The following condition catches both aliasing (when this == &rhs),
+        // and the common case where both rhs and *this are ok.
+        if (state_ != rhs.state_) {
+            delete[] state_;
+            state_ = (rhs.state_ == nullptr) ? nullptr : CopyState(rhs.state_);
+        }
+        return *this;
+    }
+
+    Status(Status &&rhs) noexcept : state_(rhs.state_) { rhs.state_ = nullptr; }
+    Status &operator=(Status &&rhs) noexcept {
+        std::swap(state_, rhs.state_);
+        return *this;
+    }
+
+    // Return a success status.
+    static Status ok() { return Status(); }
+
+    // Return error status of an appropriate type.
+    static Status not_found(const Slice &msg, const Slice &msg2 = Slice()) {
+        return Status(k_not_found, msg, msg2);
+    }
+    static Status corruption(const Slice &msg, const Slice &msg2 = Slice()) {
+        return Status(k_corruption, msg, msg2);
+    }
+    static Status not_supported(const Slice &msg, const Slice &msg2 = Slice()) {
+        return Status(k_not_supported, msg, msg2);
+    }
+    static Status invalid_argument(const Slice &msg,
+                                   const Slice &msg2 = Slice()) {
+        return Status(k_invalid_argument, msg, msg2);
+    }
+    static Status io_error(const Slice &msg, const Slice &msg2 = Slice()) {
+        return Status(k_io_error, msg, msg2);
+    }
+
+    // Returns true iff the status indicates success.
+    bool is_ok() const { return (state_ == nullptr); }
+
+    // Returns true iff the status indicates a NotFound error.
+    bool is_not_found() const { return code() == k_not_found; }
+
+    // Returns true iff the status indicates a Corruption error.
+    bool is_corruption() const { return code() == k_corruption; }
+
+    // Returns true iff the status indicates an IOError.
+    bool is_io_error() const { return code() == k_io_error; }
+
+    // Returns true iff the status indicates a NotSupportedError.
+    bool is_not_supported_error() const { return code() == k_not_supported; }
+
+    // Returns true iff the status indicates an InvalidArgument.
+    bool is_invalid_argument() const { return code() == k_invalid_argument; }
+
+    // Return a string representation of this status suitable for printing.
+    // Returns the string "OK" for success.
+    std::string str() const;
+
+  private:
+    enum Code {
+        k_ok = 0,
+        k_not_found = 1,
+        k_corruption = 2,
+        k_not_supported = 3,
+        k_invalid_argument = 4,
+        k_io_error = 5
+    };
+
+    Code code() const {
+        return (state_ == nullptr) ? k_ok : static_cast<Code>(state_[4]);
+    }
+
+    Status(Code code, const Slice &msg, const Slice &msg2);
+    static const char *CopyState(const char *s);
+
+    // OK status has a null state_.  Otherwise, state_ is a new[] array
+    // of the following form:
+    //    state_[0..3] == length of message
+    //    state_[4]    == code
+    //    state_[5..]  == message
+    const char *state_;
+};
 
 } // namespace anchordb
