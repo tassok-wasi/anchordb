@@ -13,49 +13,47 @@
 // limitations under the License.
 
 #pragma once
-#include <anchordb/macro.h>
-
-#ifdef SWSR_MEMTABLE_SKIPLIST
-#include "anchordb/slice.h"
 #include "arena.h"
-#include "struct.h"
-#include <algorithm>
+#include <anchordb/comparator.h>
+#include <anchordb/slice.h>
 #include <cassert>
-#include <functional>
+#include <cstddef>
 #include <random>
 
 namespace anchordb {
 
-template <typename Comparator = std::less<KeyType>> class Skiplist {
+template <typename Key, typename Comparator> class Skiplist_SWSR {
   private:
     struct Node {
-        const KeyType key_;
+        const Key key_;
         const Slice value_;
         const int level_;
+
+        Node *prev_;
         Node *forward_[1];
 
-        Node(const KeyType &k, const Slice &v, int lvl)
-            : key_(k), value_(v), level_(lvl) {}
+        Node(const Key &k, const Slice &v, int lvl)
+            : key_(k), value_(v), level_(lvl), prev_(nullptr) {}
 
         ~Node() = default;
     };
 
   public:
-    explicit Skiplist(Comparator cmp, Arena *arena)
+    explicit Skiplist_SWSR(Comparator cmp, Arena *arena)
         : cmp_(cmp), arena_(arena), gen_(std::random_device{}()),
           dist_(prob_factor_), curr_level_{0} {
-        head_ = new_node_(KeyType{}, Slice{}, max_level_);
+        head_ = new_node_(Key{}, Slice{}, max_level_);
         for (int i = 0; i <= max_level_; ++i) {
             head_->forward_[i] = nullptr;
         }
     }
 
-    ~Skiplist() { clear_(); }
+    ~Skiplist_SWSR() { clear_(); }
 
-    Skiplist(const Skiplist &other) = delete;
-    Skiplist &operator=(const Skiplist &other) = delete;
+    Skiplist_SWSR(const Skiplist_SWSR &other) = delete;
+    Skiplist_SWSR &operator=(const Skiplist_SWSR &other) = delete;
 
-    Skiplist(Skiplist &&other) noexcept
+    Skiplist_SWSR(Skiplist_SWSR &&other) noexcept
         : cmp_(std::move(other.cmp_)), arena_(std::move(other.arena_)),
           gen_(std::move(other.gen_)), dist_(std::move(other.dist_)),
           curr_level_{other.curr_level_}, head_{other.head_} {
@@ -64,7 +62,7 @@ template <typename Comparator = std::less<KeyType>> class Skiplist {
         other.arena_ = nullptr;
     }
 
-    Skiplist &operator=(Skiplist &&other) noexcept {
+    Skiplist_SWSR &operator=(Skiplist_SWSR &&other) noexcept {
         if (this != &other) {
             clear_();
 
@@ -80,19 +78,19 @@ template <typename Comparator = std::less<KeyType>> class Skiplist {
         return *this;
     }
 
-    void insert(const KeyType &key, const Slice &value);
-    bool contains(const KeyType &key) const;
+    void insert(const Key &key, const Slice &value);
+    bool contains(const Key &key) const;
 
     class Iterator {
       public:
-        explicit Iterator(const Skiplist *list)
+        explicit Iterator(const Skiplist_SWSR *list)
             : list_(list), node_(list->head_->forward_[0]) {}
 
         ~Iterator() = default;
 
         bool valid() const { return node_ != nullptr; }
 
-        const KeyType &key() const {
+        const Key &key() const {
             assert(valid());
             return node_->key_;
         }
@@ -109,21 +107,10 @@ template <typename Comparator = std::less<KeyType>> class Skiplist {
 
         void prev() {
             assert(valid());
-            if (node_ == list_->head_) {
-                node_ = nullptr;
-                return;
-            }
-            Node *curr = list_->head_;
-            for (int i = list_->curr_level_; i >= 0; --i) {
-                while (curr->forward_[i] != nullptr &&
-                       list_->less_(curr->forward_[i]->key_, node_->key_)) {
-                    curr = curr->forward_[i];
-                }
-            }
-            node_ = (curr == list_->head_) ? nullptr : curr;
+            node_ = (node_->prev_ == list_->head_) ? nullptr : node_->prev_;
         }
 
-        void seek(const KeyType &target) {
+        void seek(const Key &target) {
             node_ = list_->find_greater_or_equal_(target);
         }
 
@@ -137,22 +124,13 @@ template <typename Comparator = std::less<KeyType>> class Skiplist {
         }
 
       private:
-        const Skiplist *list_;
+        const Skiplist_SWSR *list_;
         Node *node_;
     };
 
   private:
-    int random_level_();
-    void clear_();
-    Node *new_node_(const KeyType &key, const Slice &value, int level);
-
-    Node *find_greater_or_equal_(const KeyType &key) const;
-    Node *find_last_() const;
-
-    bool less_(const KeyType &a, const KeyType &b) const { return cmp_(a, b); }
-    bool equal_(const KeyType &a, const KeyType &b) const {
-        return !cmp_(a, b) && !cmp_(b, a);
-    }
+    Arena *arena_;
+    Comparator cmp_;
 
     int max_level_ = 12;
     float prob_factor_ = 0.5f;
@@ -160,14 +138,23 @@ template <typename Comparator = std::less<KeyType>> class Skiplist {
     int curr_level_;
     Node *head_;
 
-    Arena *arena_;
-    Comparator cmp_;
-
     std::mt19937 gen_;
     std::bernoulli_distribution dist_;
+
+    int random_level_();
+    void clear_();
+    Node *new_node_(const Key &key, const Slice &value, int level);
+
+    Node *find_greater_or_equal_(const Key &key) const;
+    Node *find_last_() const;
+
+    bool less_(const Key &a, const Key &b) const { return cmp_(a, b) < 0; }
+    bool equal_(const Key &a, const Key &b) const { return cmp_(a, b) == 0; }
+    bool greater_(const Key &a, const Key &b) const { return cmp_(a, b) > 0; }
 };
 
-template <typename Comparator> int Skiplist<Comparator>::random_level_() {
+template <typename Key, typename Comparator>
+int Skiplist_SWSR<Key, Comparator>::random_level_() {
     int lvl = 0;
     while (dist_(gen_) && lvl < max_level_) {
         lvl++;
@@ -175,7 +162,8 @@ template <typename Comparator> int Skiplist<Comparator>::random_level_() {
     return lvl;
 }
 
-template <typename Comparator> void Skiplist<Comparator>::clear_() {
+template <typename Key, typename Comparator>
+void Skiplist_SWSR<Key, Comparator>::clear_() {
     if (!head_)
         return;
     Node *curr = head_->forward_[0];
@@ -190,18 +178,18 @@ template <typename Comparator> void Skiplist<Comparator>::clear_() {
     curr_level_ = 0;
 }
 
-template <typename Comparator>
-typename Skiplist<Comparator>::Node *
-Skiplist<Comparator>::new_node_(const KeyType &key, const Slice &value,
-                                int level) {
+template <typename Key, typename Comparator>
+typename Skiplist_SWSR<Key, Comparator>::Node *
+Skiplist_SWSR<Key, Comparator>::new_node_(const Key &key, const Slice &value,
+                                          int level) {
     size_t mem_size = sizeof(Node) + sizeof(Node *) * level;
     char *node_mem = arena_->allocate_aligned(mem_size);
     return new (node_mem) Node(key, value, level);
 }
 
-template <typename Comparator>
-typename Skiplist<Comparator>::Node *
-Skiplist<Comparator>::find_greater_or_equal_(const KeyType &key) const {
+template <typename Key, typename Comparator>
+typename Skiplist_SWSR<Key, Comparator>::Node *
+Skiplist_SWSR<Key, Comparator>::find_greater_or_equal_(const Key &key) const {
     Node *curr = head_;
     for (int i = curr_level_; i >= 0; --i) {
         while (curr->forward_[i] != nullptr &&
@@ -212,8 +200,9 @@ Skiplist<Comparator>::find_greater_or_equal_(const KeyType &key) const {
     return curr->forward_[0];
 }
 
-template <typename Comparator>
-typename Skiplist<Comparator>::Node *Skiplist<Comparator>::find_last_() const {
+template <typename Key, typename Comparator>
+typename Skiplist_SWSR<Key, Comparator>::Node *
+Skiplist_SWSR<Key, Comparator>::find_last_() const {
     Node *curr = head_;
     for (int i = curr_level_; i >= 0; --i) {
         while (curr->forward_[i] != nullptr) {
@@ -223,9 +212,9 @@ typename Skiplist<Comparator>::Node *Skiplist<Comparator>::find_last_() const {
     return curr;
 }
 
-// default copy overload
-template <typename Comparator>
-void Skiplist<Comparator>::insert(const KeyType &key, const Slice &value) {
+template <typename Key, typename Comparator>
+void Skiplist_SWSR<Key, Comparator>::insert(const Key &key,
+                                            const Slice &value) {
     Node *update[max_level_ + 1];
     Node *curr = head_;
     for (int i = curr_level_; i >= 0; --i) {
@@ -250,18 +239,24 @@ void Skiplist<Comparator>::insert(const KeyType &key, const Slice &value) {
     }
 
     Node *x = new_node_(key, value, new_level);
+    Node *next_node = update[0]->forward_[0];
+
+    x->prev_ = update[0];
+
     for (int i = 0; i <= new_level; ++i) {
         x->forward_[i] = update[i]->forward_[i];
         update[i]->forward_[i] = x;
     }
+
+    if (next_node != nullptr) {
+        next_node->prev_ = x;
+    }
 }
 
-template <typename Comparator>
-bool Skiplist<Comparator>::contains(const KeyType &key) const {
+template <typename Key, typename Comparator>
+bool Skiplist_SWSR<Key, Comparator>::contains(const Key &key) const {
     Node *x = find_greater_or_equal_(key);
     return x != nullptr && equal_(key, x->key_);
 }
 
 } // namespace anchordb
-
-#endif

@@ -12,7 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#if !defined(MWMR_MEMTABLE_SKIPLIST) || !defined(SWMR_MEMTABLE_SKIPLIST) ||    \
+#if defined(MWMR_MEMTABLE_SKIPLIST) + defined(SWMR_MEMTABLE_SKIPLIST) +        \
+        defined(SWSR_MEMTABLE_SKIPLIST) >                                      \
+    1
+#error                                                                         \
+    "Only one of MWMR_MEMTABLE_SKIPLIST, SWMR_MEMTABLE_SKIPLIST, or SWSR_MEMTABLE_SKIPLIST can be defined"
+#endif
+
+#if !defined(MWMR_MEMTABLE_SKIPLIST) && !defined(SWMR_MEMTABLE_SKIPLIST) &&    \
     !defined(SWSR_MEMTABLE_SKIPLIST)
-#define MWMR_MEMTABLE_SKIPLIST = 1
+#define MWMR_MEMTABLE_SKIPLIST 1
 #endif

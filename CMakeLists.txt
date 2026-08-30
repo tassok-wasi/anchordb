@@ -12,12 +12,18 @@ target_sources(anchordb
     PRIVATE
         src/memtable/arena.h
         src/memtable/arena.cc
-        src/memtable/struct.h
         src/memtable/mwmr_skiplist.h
         src/memtable/swmr_skiplist.h
         src/memtable/swsr_skiplist.h
+        src/memtable/skiplist.h
+        src/memtable/table.h
+        src/memtable/table.cc
         src/util/log_writer.h
         src/util/log_writer.cc
+        src/util/coding.h
+        src/util/coding.cc
+        src/memtable/key.h
+        src/memtable/key.cc
     PUBLIC
         FILE_SET HEADERS
         BASE_DIRS
@@ -26,4 +32,14 @@ target_sources(anchordb
             include/anchordb/macro.h
             include/anchordb/export.h
             include/anchordb/slice.h
+            include/anchordb/comparator.h
+            include/anchordb/iterator.h
+            include/anchordb/status.h
+)
+
+target_include_directories(anchordb
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
 )

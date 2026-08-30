@@ -12,19 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "table.h"
 
-#include <anchordb/slice.h>
-#include <cstdint>
-namespace anchordb {
-
-enum class OpType : uint8_t { PUT = 0, DELETE = 1 };
-
-struct KeyType {
-    const Slice key;
-    uint32_t seq_num;
-    OpType op_type;
-    uint64_t tstamp;
-};
-
-} // namespace anchordb
+namespace anchordb {}
