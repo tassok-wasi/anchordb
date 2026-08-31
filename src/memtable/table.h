@@ -14,12 +14,13 @@
 
 #pragma once
 
+#include "anchordb/iterator.h"
 #include "anchordb/slice.h"
 #include "anchordb/status.h"
 #include "src/memtable/arena.h"
 #include "src/memtable/key.h"
 #include "src/memtable/skiplist.h"
-#include <anchordb/iterator.h>
+#include "src/util/coding.h"
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -27,7 +28,24 @@
 
 namespace anchordb {
 
-class MemTableIterator {};
+class MemTableIterator;
+class InternalKeyComparator;
+
+namespace {
+Slice get_len_prefixed_slice(const char *data) {
+    uint32_t len;
+    const char *p = data;
+    p = get_varint_32_ptr(p, p + 5, &len);
+    return Slice(p, len);
+}
+
+char *encode_key(std::string *scratch, const Slice &target) {
+    scratch->clear();
+    put_varint_32(scratch, target.size());
+    scratch->append(target.data(), target.size());
+    return scratch->data();
+}
+} // namespace
 
 class MemTable {
   public:

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "anchordb/slice.h"
+#include "anchordb/status.h"
 #include "src/memtable/arena.h"
 #include "src/memtable/key.h"
 #include "src/util/coding.h"
@@ -21,24 +22,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <sys/types.h>
 
 namespace anchordb {
-
-namespace {
-Slice get_len_prefixed_slice(const char *data) {
-    uint32_t len;
-    const char *p = data;
-    p = get_varint_32_ptr(p, p + 5, &len);
-    return Slice(p, len);
-}
-
-char *encode_key(std::string *scratch, const Slice &target) {
-    scratch->clear();
-    put_varint_32(scratch, target.size());
-    scratch->append(target.data(), target.size());
-    return scratch->data();
-}
-} // namespace
 
 MemTable::MemTable(const InternalKeyComparator &comparator,
                    const uint32_t arena_block_size)
@@ -57,8 +43,43 @@ int MemTable::KeyComparator::operator()(const char *aptr,
     return comparator.compare(a, b);
 }
 
+class MemTableIterator : public Iterator {
+  public:
+    explicit MemTableIterator(MemTable::Table *table) : iter_(table) {}
+
+    MemTableIterator(const MemTableIterator &) = delete;
+    MemTableIterator &operator=(const MemTableIterator &) = delete;
+
+    ~MemTableIterator() override = default;
+
+    bool valid() const override { return iter_.valid(); }
+    void next() override { iter_.next(); }
+    void prev() override { iter_.prev(); }
+    void seek(const Slice &key) override { iter_.seek(encode_key(&tmp_, key)); }
+    void seek_to_first() override { iter_.seek_to_first(); }
+    void seek_to_last() override { iter_.seek_to_last(); }
+    Slice key() const override { return get_len_prefixed_slice(iter_.key()); }
+    Slice value() const override {
+        Slice key_slice = get_len_prefixed_slice(iter_.key());
+        return get_len_prefixed_slice(key_slice.data() + key_slice.size());
+    }
+    Status status() const override { return Status::ok(); }
+
+  private:
+    MemTable::Table::Iterator iter_;
+    std::string tmp_;
+};
+
+Iterator *MemTable::new_iterator() { return new MemTableIterator(&table_); }
+
 void MemTable::add(SeqNum s, ValueType type, const Slice &key,
                    const Slice &value) {
+    // Format of an entry is concatenation of:
+    //  key_size     : varint32 of internal_key.size()
+    //  key bytes    : char[internal_key.size()]
+    //  tag          : uint64((sequence << 8) | type)
+    //  value_size   : varint32 of value.size()
+    //  value bytes  : char[value.size()]
     size_t key_size = key.size();
     size_t value_size = value.size();
     size_t internal_key_size = key_size + 8;
@@ -76,7 +97,36 @@ void MemTable::add(SeqNum s, ValueType type, const Slice &key,
 }
 
 bool MemTable::get(const LookUpKey &key, std::string *value, Status *s) {
-    return true; // not implemented yet
+    Slice mem_key = key.memtable_key();
+    Table::Iterator iter(&table_);
+    iter.seek(mem_key.data());
+    if (iter.valid()) {
+        // entry format is:
+        //    klength  varint32
+        //    userkey  char[klength]
+        //    tag      uint64
+        //    vlength  varint32
+        //    value    char[vlength]
+        const char *entry = iter.key();
+        uint32_t key_len;
+        const char *key_ptr = get_varint_32_ptr(entry, entry + 5, &key_len);
+        if (comparator_.comparator.user_comparator()->compare(
+                Slice(key_ptr, key_len - 8), key.user_key()) == 0) {
+            const uint64_t tag = decode_fixed_64(key_ptr + key_len - 8);
+            switch (static_cast<ValueType>(tag & 0xff)) {
+            case TypeValue: {
+                Slice v = get_len_prefixed_slice(key_ptr + key_len);
+                value->assign(v.data(), v.size());
+                return true;
+            }
+            case TypeDeletion: {
+                *s = Status::not_found(Slice());
+                return false;
+            }
+            }
+        }
+    }
+    return false;
 }
 
 } // namespace anchordb
