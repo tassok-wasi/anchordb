@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #include "key.h"
-#include "src/util/coding.h"
+#include "util/coding.h"
 #include <anchordb/slice.h>
 #include <cassert>
 #include <cstddef>

@@ -17,10 +17,10 @@
 #include "anchordb/iterator.h"
 #include "anchordb/slice.h"
 #include "anchordb/status.h"
-#include "src/memtable/arena.h"
-#include "src/memtable/key.h"
-#include "src/memtable/skiplist.h"
-#include "src/util/coding.h"
+#include "memtable/arena.h"
+#include "memtable/key.h"
+#include "memtable/skiplist.h"
+#include "util/coding.h"
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
