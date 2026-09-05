@@ -1,0 +1,315 @@
+// Copyright 2026 Tassok Imam Wasi
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+
+//     http://www.apache.org/licenses/LICENSE-2.0
+
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "io/env_posix.h"
+
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
+
+namespace anchordb {
+
+PosixEnv::PosixEnv() : PosixEnv(1000, 256, false) {}
+
+PosixEnv::PosixEnv(int max_open_files, uint32_t ring_entries,
+                   bool direct_io_enabled)
+    : direct_io_enabled_(direct_io_enabled), ring_entries_(ring_entries),
+      fd_limiter_(max_open_files) {
+    int ret = io_uring_queue_init(ring_entries, &default_ring_, 0);
+    if (ret < 0) {
+        throw std::system_error(-ret, std::generic_category(),
+                                "Failed to initialize default io_uring queue");
+    }
+}
+
+PosixEnv::~PosixEnv() {
+    // Signal background worker threads to stop after finishing remaining
+    // work
+    {
+        std::lock_guard<std::mutex> lock(background_work_mutex_);
+        shutting_down_ = true;
+        background_work_cv_.notify_all();
+    }
+
+    // Join background worker threads
+    for (std::thread &th : background_threads_) {
+        if (th.joinable()) {
+            th.join();
+        }
+    }
+
+    // Destroy shared default ring
+    io_uring_queue_exit(&default_ring_);
+
+    // Destroy all registered thread-local rings
+    std::lock_guard<std::mutex> lock(tls_rings_mutex_);
+    for (struct io_uring *ring : registered_tls_rings_) {
+        if (ring) {
+            io_uring_queue_exit(ring);
+            delete ring;
+        }
+    }
+    registered_tls_rings_.clear();
+}
+
+struct io_uring *PosixEnv::get_thread_local_ring() {
+    thread_local struct io_uring *tls_ring = nullptr;
+
+    if (tls_ring == nullptr) {
+        tls_ring = new struct io_uring();
+        int ret = io_uring_queue_init(ring_entries_, tls_ring, 0);
+        if (ret < 0) {
+            delete tls_ring;
+            tls_ring = nullptr; // Prevent dangling pointer on subsequent calls
+            return &default_ring_;
+        }
+
+        std::lock_guard<std::mutex> lock(tls_rings_mutex_);
+        registered_tls_rings_.push_back(tls_ring);
+    }
+    return tls_ring;
+}
+
+Status PosixEnv::new_sequential_read_file(const std::string &filename,
+                                          SequentialReadFile **result) {
+    int fd = ::open(filename.c_str(), O_RDONLY | O_CLOEXEC);
+    if (fd < 0) {
+        *result = nullptr;
+        return posix_error(filename, errno);
+    }
+    *result = new PosixSequentialReadFile(filename, fd);
+    return Status::ok();
+}
+
+Status PosixEnv::new_random_access_file(const std::string &filename,
+                                        RandomAccessFile **result) {
+    int fd = -1;
+
+    if (fd_limiter_.acquire()) {
+        int flags = O_RDONLY;
+        if (direct_io_enabled_) {
+            flags |= O_DIRECT;
+        }
+
+        flags |= O_CLOEXEC;
+
+        fd = ::open(filename.c_str(), flags, 0644);
+        if (fd < 0) {
+            int err = errno;
+            // Release the limiter slot if open failed
+            fd_limiter_.release();
+            return posix_error(filename, err);
+        }
+    }
+
+    // Obtain the calling thread's dedicated lock-free io_uring ring
+    struct io_uring *target_ring = get_thread_local_ring();
+    if (!target_ring) {
+        target_ring = &default_ring_; // Fallback to shared ring if TLS
+                                      // allocation fails
+    }
+
+    *result = new PosixRandomAccessFile(filename, fd, &fd_limiter_, target_ring,
+                                        direct_io_enabled_);
+    return Status::ok();
+}
+
+Status PosixEnv::new_writable_file(const std::string &filename,
+                                   WritableFile **result) {
+    int fd = ::open(filename.c_str(), O_TRUNC | O_WRONLY | O_CREAT | O_CLOEXEC,
+                    0644);
+    if (fd < 0) {
+        *result = nullptr;
+        return posix_error(filename, errno);
+    }
+    *result = new PosixWritableFile(filename, fd);
+    return Status::ok();
+}
+
+Status PosixEnv::new_appendable_file(const std::string &filename,
+                                     WritableFile **result) {
+    int fd = ::open(filename.c_str(), O_APPEND | O_WRONLY | O_CREAT | O_CLOEXEC,
+                    0644);
+    if (fd < 0) {
+        *result = nullptr;
+        return posix_error(filename, errno);
+    }
+    *result = new PosixWritableFile(filename, fd);
+    return Status::ok();
+}
+
+bool PosixEnv::file_exists(const std::string &filename) {
+    return ::access(filename.c_str(), F_OK) == 0;
+}
+
+Status PosixEnv::get_children(const std::string &dir_path,
+                              std::vector<std::string> *result) {
+    result->clear();
+    ::DIR *dir = ::opendir(dir_path.c_str());
+    if (dir == nullptr) {
+        return posix_error(dir_path, errno);
+    }
+    struct ::dirent *entry;
+    while ((entry = ::readdir(dir)) != nullptr) {
+        result->emplace_back(entry->d_name);
+    }
+    ::closedir(dir);
+    return Status::ok();
+}
+
+Status PosixEnv::remove_file(const std::string &filename) {
+    if (::unlink(filename.c_str()) != 0) {
+        return posix_error(filename, errno);
+    }
+    return Status::ok();
+}
+
+Status PosixEnv::create_dir(const std::string &dir_name) {
+    if (::mkdir(dir_name.c_str(), 0755) != 0) {
+        return posix_error(dir_name, errno);
+    }
+    return Status::ok();
+}
+
+Status PosixEnv::remove_dir(const std::string &dir_name) {
+    if (::rmdir(dir_name.c_str()) != 0) {
+        return posix_error(dir_name, errno);
+    }
+    return Status::ok();
+}
+
+Status PosixEnv::get_file_size(const std::string &filename, uint64_t *size) {
+    struct ::stat file_stat;
+    if (::stat(filename.c_str(), &file_stat) != 0) {
+        *size = 0;
+        return posix_error(filename, errno);
+    }
+    *size = file_stat.st_size;
+    return Status::ok();
+}
+
+Status PosixEnv::rename_file(const std::string &from, const std::string &to) {
+    if (::rename(from.c_str(), to.c_str()) != 0) {
+        return posix_error(from, errno);
+    }
+    return Status::ok();
+}
+
+Status PosixEnv::lock_file(const std::string &filename, FileLock **lock) {
+    *lock = nullptr;
+
+    int fd = ::open(filename.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0644);
+    if (fd < 0) {
+        return posix_error(filename, errno);
+    }
+
+    if (!locks_.insert(filename)) {
+        ::close(fd);
+        return Status::io_error("lock " + filename, "already held by process");
+    }
+
+    if (lock_or_unlock(fd, true) == -1) {
+        int lock_errno = errno;
+        ::close(fd);
+        locks_.remove(filename);
+        return posix_error("lock " + filename, lock_errno);
+    }
+
+    *lock = new PosixFileLock(fd, filename);
+    return Status::ok();
+}
+
+Status PosixEnv::unlock_file(FileLock *lock) {
+    PosixFileLock *posix_file_lock = static_cast<PosixFileLock *>(lock);
+    if (lock_or_unlock(posix_file_lock->fd(), false) == -1) {
+        return posix_error("unlock " + posix_file_lock->filename(), errno);
+    }
+
+    locks_.remove(posix_file_lock->filename());
+    ::close(posix_file_lock->fd());
+    delete posix_file_lock;
+    return Status::ok();
+}
+
+void PosixEnv::schedule(void (*function)(void *arg), void *arg) {
+    std::lock_guard<std::mutex> lock(background_work_mutex_);
+
+    // Lazy-start the dedicated background execution thread on first
+    // scheduled job
+    if (!background_threads_started_) {
+        background_threads_started_ = true;
+        background_threads_.emplace_back([this] { background_thread_main(); });
+    }
+
+    // Queue the task
+    background_work_queue_.push(BackgroundTask{function, arg});
+    background_work_cv_.notify_one();
+}
+
+void PosixEnv::background_thread_main() {
+    // Note: When this background worker thread starts executing tasks,
+    // any call to GetThreadLocalRing() will automatically initialize
+    // a dedicated thread-local io_uring ring and register it inside
+    // tls_rings_mutex_.
+
+    while (true) {
+        BackgroundTask task;
+        {
+            std::unique_lock<std::mutex> lock(background_work_mutex_);
+            background_work_cv_.wait(lock, [this] {
+                return shutting_down_ || !background_work_queue_.empty();
+            });
+
+            if (shutting_down_ && background_work_queue_.empty()) {
+                return;
+            }
+
+            task = background_work_queue_.front();
+            background_work_queue_.pop();
+        }
+
+        // Execute background callback
+        (*task.function)(task.arg);
+    }
+}
+
+Status PosixEnv::get_test_dir(std::string *result) {
+    const char *env = std::getenv("TEST_TMPDIR");
+    if (env && env[0] != '\0') {
+        *result = env;
+    } else {
+        char buf[100];
+        std::snprintf(buf, sizeof(buf), "/tmp/anchordbtest-%d",
+                      static_cast<int>(::geteuid()));
+        *result = buf;
+    }
+
+    // The CreateDir status is ignored because the directory may already
+    // exist.
+    create_dir(*result);
+
+    return Status::ok();
+}
+
+uint64_t PosixEnv::now_micros() {
+    struct timeval tv;
+    ::gettimeofday(&tv, nullptr);
+    return static_cast<uint64_t>(tv.tv_sec) * 1000000 + tv.tv_usec;
+}
+
+void PosixEnv::sleep_for_micros(int micros) {
+    std::this_thread::sleep_for(std::chrono::microseconds(micros));
+}
+
+} // namespace anchordb
