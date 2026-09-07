@@ -19,10 +19,6 @@
 #include <string>
 namespace anchordb {
 
-// ---- Fixed-width encoding (little-endian) ----
-// These encode/decode integers in a portable little-endian format.
-// The output is always 4 or 8 bytes respectively.
-
 // Writes a 32-bit unsigned integer to dst in little-endian byte order.
 void encode_fixed_32(char *dst, uint32_t value);
 // Writes a 64-bit unsigned integer to dst in little-endian byte order.
@@ -33,7 +29,7 @@ uint32_t decode_fixed_32(const char *ptr);
 // Reads a 64-bit unsigned integer from ptr (little-endian).
 uint64_t decode_fixed_64(const char *ptr);
 
-// ---- Varint encoding (variable-length, little-endian base-128) ----
+// Varint encoding (variable-length, little-endian base-128)
 // Each byte uses 7 bits for data and 1 continuation bit (MSB).
 // The MSB is set on all bytes except the last, indicating more bytes follow.
 // This is compact for small values: a uint32_t takes 1–5 bytes, a uint64_t
@@ -51,8 +47,6 @@ uint32_t decode_varint_32(const char *ptr);
 // Decodes a varint64 from ptr.  Caller must ensure the varint is well-formed.
 uint64_t decode_varint_64(const char *ptr);
 
-// ---- Convenience wrappers that append to a std::string ----
-
 // Appends a 4-byte little-endian encoding of value to *dst.
 void put_fixed_32(std::string *dst, uint32_t value);
 // Appends an 8-byte little-endian encoding of value to *dst.
@@ -66,7 +60,6 @@ void put_varint_64(std::string *dst, uint64_t value);
 // Returns the number of bytes needed to encode v as a varint.
 int varint_len(uint64_t v);
 
-// ---- Bounds-checked varint decoding ----
 // These read a varint from [p, limit), returning a pointer to the byte after
 // the varint on success, or nullptr if the varint is truncated.
 
@@ -87,7 +80,7 @@ const char *get_varint_64_ptr(const char *p, const char *limit,
 bool get_varint_32(Slice *input, uint32_t *value);
 bool get_varint_64(Slice *input, uint64_t *value);
 
-// ---- Length-prefixed slice encoding ----
+// Length-prefixed slice encoding
 // Encodes a Slice as: | varint32(size) | raw bytes |.
 // This is the standard way to embed variable-length data in a binary record.
 

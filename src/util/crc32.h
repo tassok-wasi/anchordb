@@ -18,35 +18,46 @@
 #include <cstdint>
 
 // Include Intrinsics based on architecture
-#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
-    #define HAS_X86 1
-    #if defined(_MSC_VER)
-        #include <intrin.h>
-    #else
-        #include <x86intrin.h>
-    #endif
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) ||             \
+    defined(_M_IX86)
+#define HAS_X86 1
+#if defined(_MSC_VER)
+#include <intrin.h>
+#else
+#include <x86intrin.h>
+#endif // _MSC_VER
 #elif defined(__aarch64__) || defined(_M_ARM64)
-    #define HAS_ARM 1
-    #if defined(__ARM_FEATURE_CRC32)
-        #include <arm_acle.h>
-    #endif
-#endif
+#define HAS_ARM 1
+#if defined(__ARM_FEATURE_CRC32)
+#include <arm_acle.h>
+#endif // __ARM_FEATURE_CRC32
+#endif // _MSC_VER
 
 namespace anchordb {
 namespace crc32 {
 
+// Extends a running CRC32 checksum with additional data.
+// `crc` is the initial CRC value (typically 0 or a previously computed CRC).
+// `data` points to the bytes to process, and `n` is the number of bytes.
+// Returns the updated CRC32 value.
 uint32_t extend(uint32_t crc, const char *data, size_t n);
 
+// Computes the CRC32 checksum of a block of data from scratch.
+// Equivalent to calling extend(0, data, n).
 uint32_t value(const char *data, size_t n);
 
-static const uint32_t mask_delta = 0xa282ead8ul; // used by leveldb
+// Delta value used by the CRC mask/unmask operations (as in LevelDB).
+static const uint32_t k_mask_delta = 0xa282ead8ul; // used by leveldb
 
+// Masks a raw CRC32 value so that it cannot contain a partial frame delimiter.
+// The masked value is suitable for storage or transmission.
 inline uint32_t mask(uint32_t crc) {
-    return ((crc >> 15) | (crc << 17)) + mask_delta;
+    return ((crc >> 15) | (crc << 17)) + k_mask_delta;
 }
 
+// Reverses the mask operation to recover the original CRC32 value.
 inline uint32_t unmask(uint32_t masked_crc) {
-    uint32_t rot = masked_crc - mask_delta;
+    uint32_t rot = masked_crc - k_mask_delta;
     return ((rot >> 17) | (rot << 15));
 }
 

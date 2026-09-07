@@ -104,17 +104,7 @@ class ANCHORDB_EXPORT Slice {
                            suffix.size_) == 0;
     }
 
-    // Lexicographic comparison operators.  Shorter slices compare less than
-    // longer slices when all bytes up to the shorter length are equal.
-    bool operator<(const Slice &other) const { return compare_(other) < 0; }
-    bool operator>(const Slice &other) const { return compare_(other) > 0; }
-    bool operator<=(const Slice &other) const { return compare_(other) <= 0; }
-    bool operator>=(const Slice &other) const { return compare_(other) >= 0; }
-    bool operator==(const Slice &other) const {
-        return size_ == other.size_ &&
-               std::memcmp(data_, other.data_, size_) == 0;
-    }
-    bool operator!=(const Slice &other) const { return !(*this == other); }
+    int compare(const Slice &other) const { return compare_(other); }
 
   private:
     const char *data_;

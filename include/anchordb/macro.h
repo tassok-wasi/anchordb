@@ -16,29 +16,30 @@
 
 // Count how many variants are actively defined as non-zero
 #if defined(MWMR_MEMTABLE_SKIPLIST) && (MWMR_MEMTABLE_SKIPLIST + 0)
-    #define _ANCHORDB_MWMR 1
+#define _ANCHORDB_MWMR 1
 #else
-    #define _ANCHORDB_MWMR 0
+#define _ANCHORDB_MWMR 0
 #endif
 
 #if defined(SWMR_MEMTABLE_SKIPLIST) && (SWMR_MEMTABLE_SKIPLIST + 0)
-    #define _ANCHORDB_SWMR 1
+#define _ANCHORDB_SWMR 1
 #else
-    #define _ANCHORDB_SWMR 0
+#define _ANCHORDB_SWMR 0
 #endif
 
 #if defined(SWSR_MEMTABLE_SKIPLIST) && (SWSR_MEMTABLE_SKIPLIST + 0)
-    #define _ANCHORDB_SWSR 1
+#define _ANCHORDB_SWSR 1
 #else
-    #define _ANCHORDB_SWSR 0
+#define _ANCHORDB_SWSR 0
 #endif
 
 // Check for multiple conflicting definitions
 #if (_ANCHORDB_MWMR + _ANCHORDB_SWMR + _ANCHORDB_SWSR) > 1
-    #error "Only one of MWMR_MEMTABLE_SKIPLIST, SWMR_MEMTABLE_SKIPLIST, or SWSR_MEMTABLE_SKIPLIST can be defined!"
+#error                                                                         \
+    "Only one of MWMR_MEMTABLE_SKIPLIST, SWMR_MEMTABLE_SKIPLIST, or SWSR_MEMTABLE_SKIPLIST can be defined!"
 #endif
 
 // Default to MWMR if no variant was chosen by CMake or user C++ code
 #if (_ANCHORDB_MWMR + _ANCHORDB_SWMR + _ANCHORDB_SWSR) == 0
-    #define MWMR_MEMTABLE_SKIPLIST 1
+#define MWMR_MEMTABLE_SKIPLIST 1
 #endif

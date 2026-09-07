@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "anchordb/slice.h"
 #include "key.h"
 #include "util/coding.h"
-#include <anchordb/slice.h>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <string>
 
 namespace anchordb {
 
@@ -49,16 +50,6 @@ Slice extract_user_key(const Slice &internal_key) {
     return Slice(internal_key.data(), internal_key.size() - 8);
 }
 
-namespace {
-// Packs a 56-bit sequence number and a 1-byte ValueType into a single uint64_t.
-// Layout: | sequence (56 bits) | type (8 bits) |
-uint64_t pack_seq_and_type(uint64_t seq, ValueType t) {
-    assert(seq <= max_seq_num);
-    assert(t <= ValueType::TypeValue);
-    return (seq << 8) | static_cast<uint64_t>(t);
-}
-} // namespace
-
 // Appends the internal key encoding to *result: user_key bytes followed by
 // the 8-byte packed sequence+type trailer.
 void append_internal_key(std::string *result, const ParsedInternalKey &key) {
@@ -66,25 +57,24 @@ void append_internal_key(std::string *result, const ParsedInternalKey &key) {
     put_fixed_64(result, pack_seq_and_type(key.sequence, key.type));
 }
 
-const char *InternalKeyComparator::name() const {
-    return "anchodb.InternalKeyComparator";
+namespace {
+void put_fixed_32(char *dst, uint32_t value) {
+    char buf[4];
+    encode_fixed_32(buf, value);
+    memcpy(dst, buf, 4);
 }
 
-// Orders by user_key ascending, then by sequence number descending.
-// When two internal keys share the same user_key, the one with the larger
-// sequence number (newer write) sorts first.
-int InternalKeyComparator::compare(const Slice &a, const Slice &b) const {
-    int r = user_comparator_->compare(extract_user_key(a), extract_user_key(b));
-    if (r == 0) {
-        const uint64_t anum = decode_fixed_64(a.data() + a.size() - 8);
-        const uint64_t bnum = decode_fixed_64(b.data() + b.size() - 8);
-        if (anum > bnum) {
-            return -1;
-        } else if (anum < bnum) {
-            return 1;
-        }
-    }
-    return r;
+void put_fixed_64(char *dst, uint64_t value) {
+    char buf[8];
+    encode_fixed_64(buf, value);
+    memcpy(dst, buf, 8);
+}
+} // namespace
+
+void append_blob_address(char *result, const ParsedBlobAddress &addr) {
+    put_fixed_64(result, addr.offset);
+    put_fixed_32(result + 8, addr.file_id);
+    put_fixed_32(result + 12, addr.size);
 }
 
 // Constructs a memtable lookup key.  The wire format is:
