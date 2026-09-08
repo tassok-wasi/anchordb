@@ -45,12 +45,11 @@ class PosixEnv : public Env {
     // Constructs a PosixEnv with |max_open_files| limiting concurrent open
     // file descriptors, |ring_entries| io_uring submission queue entries,
     // and an optional |direct_io_enabled| flag for O_DIRECT on reads.
-    PosixEnv(int max_open_files, uint32_t ring_entries,
-             bool direct_io_enabled = false);
+    PosixEnv(int max_open_files, uint32_t ring_entries, bool direct_io = true);
 
     // Destructs the environment, joins background threads, and destroys
     // all io_uring rings (default and thread-local).
-    ~PosixEnv();
+    ~PosixEnv() override;
 
     // Returns a thread-local io_uring ring initialized with |ring_entries_|.
     // Falls back to |default_ring_| if initialization fails.
@@ -62,12 +61,10 @@ class PosixEnv : public Env {
                                     SequentialReadFile **result) override;
     Status new_random_access_file(const std::string &filename,
                                   RandomAccessFile **result) override;
-    Status new_writable_file(const std::string &filename,
+    Status new_writable_file(const std::string &filename, AlignedBuffer **buf,
                              WritableFile **result) override;
-    Status new_appendable_file(const std::string &filename,
+    Status new_appendable_file(const std::string &filename, AlignedBuffer **buf,
                                WritableFile **result) override;
-
-    // File system queries and mutations
 
     bool file_exists(const std::string &filename) override;
     Status get_children(const std::string &dir_path,
@@ -78,21 +75,13 @@ class PosixEnv : public Env {
     Status get_file_size(const std::string &filename, uint64_t *size) override;
     Status rename_file(const std::string &from, const std::string &to) override;
 
-    // File locking
-
     Status lock_file(const std::string &filename, FileLock **lock) override;
     Status unlock_file(FileLock *posix_file_lock) override;
-
-    // Background work scheduling
 
     // Schedules |function| to run on a background thread, passing |arg|.
     void schedule(void (*function)(void *arg), void *arg) override;
 
-    // Testing utilities
-
     Status get_test_dir(std::string *result) override;
-
-    // Timing utilities
 
     // Returns the current time in microseconds since the Unix epoch.
     uint64_t now_micros() override;
@@ -108,10 +97,10 @@ class PosixEnv : public Env {
     };
 
     // Main loop for each background worker thread.
-    void background_thread_main();
+    void bg_thread_main();
 
     // Configuration
-    const bool direct_io_enabled_;
+    const bool direct_io_;
     const uint32_t ring_entries_;
 
     // File descriptor management
@@ -120,15 +109,15 @@ class PosixEnv : public Env {
 
     // io_uring infrastructure
     struct io_uring default_ring_{};
-    mutable std::mutex tls_rings_mutex_;
+    mutable std::mutex tls_ring_mutex_;
     std::vector<struct io_uring *> registered_tls_rings_;
 
     // Background thread pool
-    std::mutex background_work_mutex_;
-    std::condition_variable background_work_cv_;
-    std::queue<BackgroundTask> background_work_queue_;
-    std::vector<std::thread> background_threads_;
-    bool background_threads_started_{false};
+    std::mutex bg_work_mutex_;
+    std::condition_variable bg_work_cv_;
+    std::queue<BackgroundTask> bg_work_queue_;
+    std::vector<std::thread> bg_threads_;
+    bool bg_threads_started_{false};
     bool shutting_down_{false};
 };
 

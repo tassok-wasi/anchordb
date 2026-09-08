@@ -13,7 +13,11 @@
 // limitations under the License.
 
 #include "anchordb/status.h"
+#include "io/aligned_buf.h"
 #include "io_posix.h"
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <fcntl.h>
 #include <liburing.h>
 #include <unistd.h>
@@ -30,65 +34,166 @@ Status posix_error(const std::string &context, int error_number) {
     }
 }
 
+Status PosixSequentialReadFile::submit_read_(void *dst, size_t len,
+                                             uint64_t offset,
+                                             size_t *bytes_read) {
+    *bytes_read = 0;
+
+    struct io_uring_sqe *sqe = io_uring_get_sqe(ring_);
+    if (!sqe) {
+        int submit_ret = io_uring_submit(ring_);
+        if (submit_ret < 0) {
+            return posix_error(filename_, -submit_ret);
+        }
+        sqe = io_uring_get_sqe(ring_);
+        if (!sqe) {
+            return posix_error(filename_, EBUSY);
+        }
+    }
+
+    // Prepare positional read at explicit target offset
+    io_uring_prep_read(sqe, fd_, dst, len, offset);
+    io_uring_sqe_set_data(sqe, nullptr);
+
+    int submit_ret = io_uring_submit_and_wait(ring_, 1);
+    if (submit_ret < 0) {
+        return posix_error(filename_, -submit_ret);
+    }
+
+    struct io_uring_cqe *cqe = nullptr;
+    int wait_ret = io_uring_wait_cqe(ring_, &cqe);
+    if (wait_ret < 0) {
+        return posix_error(filename_, -wait_ret);
+    }
+
+    int res = cqe->res;
+    io_uring_cqe_seen(ring_, cqe);
+
+    if (res < 0) {
+        if (-res == EINTR) {
+            return submit_read_(dst, len, offset,
+                                bytes_read); // Retry interrupted read
+        }
+        return posix_error(filename_, -res);
+    }
+
+    *bytes_read = static_cast<size_t>(res);
+    return Status::ok();
+}
+
 // Reads up to n bytes from the file descriptor into scratch, retrying on EINTR.
 // On success, *result is set to a Slice over the bytes actually read.
 Status PosixSequentialReadFile::read(size_t n, Slice *result, char *scratch) {
-    Status status;
-    while (true) {
-        ::ssize_t read_size = ::read(fd_, scratch, n);
-        if (read_size < 0) {
-            if (errno == EINTR) {
-                continue; // Interrupted by signal; retry the read.
+    *result = Slice();
+    if (n == 0)
+        return Status::ok();
+
+    // If memory pointer, file offset, and length are all 4096-byte aligned
+    if (direct_io_) {
+        bool is_dst_aligned =
+            (reinterpret_cast<uintptr_t>(scratch) % 4096 == 0);
+        bool is_offset_aligned = (offset_ % 4096 == 0);
+        bool is_len_aligned = (n % 4096 == 0);
+
+        if (is_dst_aligned && is_offset_aligned && is_len_aligned) {
+            size_t bytes_read = 0;
+            Status s = submit_read_(scratch, n, offset_, &bytes_read);
+            if (!s.is_ok())
+                return s;
+
+            offset_ += bytes_read;
+            *result = Slice(scratch, bytes_read);
+            return Status::ok();
+        }
+    }
+
+    // Used when scratch buffer or request size 'n' is not 4KB aligned
+    if (direct_io_) {
+        size_t total_read = 0;
+
+        while (total_read < n) {
+            uint64_t aligned_offset =
+                offset_ & ~4095ULL; // Round down to 4KB sector boundary
+            size_t sector_diff = static_cast<size_t>(offset_ - aligned_offset);
+
+            size_t read_capacity = staging_buf_->capacity();
+            size_t bytes_read = 0;
+
+            Status s = submit_read_(staging_buf_->data(), read_capacity,
+                                    aligned_offset, &bytes_read);
+            if (!s.is_ok())
+                return s;
+
+            if (bytes_read <= sector_diff) {
+                break; // EOF reached
             }
-            status = posix_error(filename_, errno);
+
+            size_t valid_bytes = bytes_read - sector_diff;
+            size_t bytes_to_copy = std::min(n - total_read, valid_bytes);
+
+            std::memcpy(scratch + total_read,
+                        staging_buf_->data() + sector_diff, bytes_to_copy);
+
+            total_read += bytes_to_copy;
+            offset_ += bytes_to_copy;
+
+            if (bytes_read < read_capacity) {
+                break; // Reached end of file
+            }
+        }
+
+        *result = Slice(scratch, total_read);
+        return Status::ok();
+    }
+
+    // BUFFERED / NON-DIRECT FALLBACK PATH (Standard POSIX / io_uring)
+    if (ring_ != nullptr) {
+        size_t bytes_read = 0;
+        Status s = submit_read_(scratch, n, offset_, &bytes_read);
+        if (!s.is_ok())
+            return s;
+
+        offset_ += bytes_read;
+        *result = Slice(scratch, bytes_read);
+        return Status::ok();
+    } else {
+        // POSIX read fallback
+        while (true) {
+            ::ssize_t read_size = ::read(fd_, scratch, n);
+            if (read_size < 0) {
+                if (errno == EINTR)
+                    continue;
+                return posix_error(filename_, errno);
+            }
+            offset_ += read_size;
+            *result = Slice(scratch, read_size);
             break;
         }
-        *result = Slice(scratch, read_size);
-        break;
     }
-    return status;
+
+    return Status::ok();
 }
 
 // Advances the file offset by n bytes relative to the current position.
 Status PosixSequentialReadFile::skip(uint64_t n) {
-    if (::lseek(fd_, n, SEEK_CUR) == static_cast<off_t>(-1)) {
-        return posix_error(filename_, errno);
-    }
-    return Status::ok();
-}
+    // Advance internal logical offset
+    offset_ += n;
 
-// Performs a positional read at the given offset using io_uring.
-// If the file was opened with a permanent fd it is reused; otherwise a
-// temporary fd is opened for the duration of the call and closed on return.
-Status PosixRandomAccessFile::read(uint64_t offset, size_t n, Slice *result,
-                                   char *scratch) const {
-    *result = Slice();
-    int target_fd = -1;
-
-    // Resolve active FD (Permanent vs. On-Demand Temporary)
-    if (has_permanent_fd_) {
-        target_fd = fd_;
-    } else {
-        int flags = O_RDONLY;
-        if (direct_io_) {
-            flags |= O_DIRECT;
-        }
-        target_fd = ::open(filename_.c_str(), flags, 0644);
-        if (target_fd < 0) {
+    // Sync OS kernel offset pointer if fallback POSIX read() is used
+    if (!direct_io_ && ring_ == nullptr) {
+        if (::lseek(fd_, static_cast<off_t>(n), SEEK_CUR) ==
+            static_cast<off_t>(-1)) {
             return posix_error(filename_, errno);
         }
     }
 
-    // RAII cleanup guard for temporary FDs
-    struct TempFdGuard {
-        int fd;
-        bool is_temp;
-        ~TempFdGuard() {
-            if (is_temp && fd >= 0) {
-                ::close(fd);
-            }
-        }
-    } guard{target_fd, !has_permanent_fd_};
+    return Status::ok();
+}
+
+Status PosixRandomAccessFile::submit_read_(int fd, void *buf, size_t n,
+                                           uint64_t offset,
+                                           size_t *bytes_read) {
+    *bytes_read = 0;
 
     // Fetch SQE slot from the injected io_uring instance
     struct io_uring_sqe *sqe = io_uring_get_sqe(ring_);
@@ -105,7 +210,7 @@ Status PosixRandomAccessFile::read(uint64_t offset, size_t n, Slice *result,
     }
 
     // Prepare non-blocking positional read
-    io_uring_prep_read(sqe, target_fd, scratch, n, offset);
+    io_uring_prep_read(sqe, fd, buf, n, offset);
     io_uring_sqe_set_data(sqe, nullptr);
 
     // Submit and wait for completion of 1 I/O event
@@ -128,9 +233,139 @@ Status PosixRandomAccessFile::read(uint64_t offset, size_t n, Slice *result,
         return posix_error(filename_, -res);
     }
 
-    // Return populated slice
-    size_t bytes_read = static_cast<size_t>(res);
-    *result = Slice(scratch, bytes_read);
+    *bytes_read = static_cast<size_t>(res);
+    return Status::ok();
+}
+
+// Performs a positional read at the given offset using io_uring.
+// If the file was opened with a permanent fd it is reused; otherwise a
+// temporary fd is opened for the duration of the call and closed on return.
+Status PosixRandomAccessFile::read(uint64_t offset, size_t n, Slice *result,
+                                   char *scratch) {
+    *result = Slice();
+    int target_fd = -1;
+
+    // Resolve active FD (Permanent vs. On-Demand Temporary)
+    if (has_permanent_fd_) {
+        target_fd = fd_;
+    } else {
+        int flags = O_RDONLY | O_CLOEXEC;
+        if (direct_io_) {
+            flags |= O_DIRECT;
+        }
+        target_fd = ::open(filename_.c_str(), flags, 0644);
+        if (target_fd < 0) {
+            return posix_error(filename_, errno);
+        }
+    }
+
+    // RAII cleanup guard for temporary FDs
+    struct TempFdGuard {
+        int fd;
+        bool is_temp;
+        ~TempFdGuard() {
+            if (is_temp && fd >= 0) {
+                ::close(fd);
+            }
+        }
+    } guard{target_fd, !has_permanent_fd_};
+
+    uint64_t read_offset = offset;
+    size_t read_bytes = n;
+    char *target_buf = scratch;
+    DefaultAlignedBuffer buf;
+
+    if (direct_io_) {
+        bool is_scratch_aligned =
+            (reinterpret_cast<uintptr_t>(scratch) % k_direct_io_alignment == 0);
+        bool is_offset_aligned = (offset % k_direct_io_alignment == 0);
+        bool is_len_aligned = (n % k_direct_io_alignment == 0);
+
+        if (is_scratch_aligned && is_offset_aligned && is_len_aligned) {
+            target_buf = scratch;
+        } else {
+            read_offset =
+                offset & ~(static_cast<uint64_t>(k_direct_io_alignment) - 1);
+            uint64_t end_offset =
+                ((offset + n) + k_direct_io_alignment - 1) &
+                ~(static_cast<uint64_t>(k_direct_io_alignment) - 1);
+            read_bytes = static_cast<size_t>(end_offset - read_offset);
+
+            buf.allocate(read_bytes, k_direct_io_alignment);
+            if (!buf.is_allocated()) {
+                return Status::io_error(
+                    "Failed to allocate sector-aligned buffer for O_DIRECT");
+            }
+            target_buf = buf.data();
+        }
+    }
+
+    size_t bytes_read = 0;
+    Status status = submit_read_(target_fd, target_buf, read_bytes, read_offset,
+                                 &bytes_read);
+    if (!status.is_ok()) {
+        return status;
+    }
+
+    if (direct_io_) {
+        uint64_t internal_offset = offset - read_offset;
+
+        if (bytes_read <= internal_offset) {
+            // EOF reached before requested data offset
+            *result = Slice(scratch, 0);
+            return Status::ok();
+        }
+
+        size_t actual_payload_bytes =
+            std::min(static_cast<size_t>(bytes_read - internal_offset), n);
+
+        if (target_buf != scratch) {
+            // Copy relevant window into user's scratch buffer
+            std::memcpy(scratch, target_buf + internal_offset,
+                        actual_payload_bytes);
+        }
+        *result = Slice(scratch, actual_payload_bytes);
+    } else {
+        *result = Slice(scratch, bytes_read);
+    }
+
+    return Status::ok();
+}
+
+Status PosixWritableFile::submit_write_(const char *src, size_t len,
+                                        uint64_t offset) {
+    struct io_uring_sqe *sqe = io_uring_get_sqe(ring_);
+    if (!sqe) {
+        int submit_ret = io_uring_submit(ring_);
+        if (submit_ret < 0) {
+            return posix_error(filename_, -submit_ret);
+        }
+        sqe = io_uring_get_sqe(ring_);
+        if (!sqe) {
+            return posix_error(filename_, EBUSY);
+        }
+    }
+
+    io_uring_prep_write(sqe, fd_, src, len, offset);
+    io_uring_sqe_set_data(sqe, nullptr);
+
+    int submit_ret = io_uring_submit_and_wait(ring_, 1);
+    if (submit_ret < 0) {
+        return posix_error(filename_, -submit_ret);
+    }
+
+    struct io_uring_cqe *cqe = nullptr;
+    int wait_ret = io_uring_wait_cqe(ring_, &cqe);
+    if (wait_ret < 0) {
+        return posix_error(filename_, -wait_ret);
+    }
+
+    int res = cqe->res;
+    io_uring_cqe_seen(ring_, cqe);
+
+    if (res < 0) {
+        return posix_error(filename_, -res);
+    }
 
     return Status::ok();
 }
@@ -138,75 +373,101 @@ Status PosixRandomAccessFile::read(uint64_t offset, size_t n, Slice *result,
 // Appends data to the file, buffering small writes and flushing when the
 // internal buffer is full. Large writes bypass the buffer entirely.
 Status PosixWritableFile::append(const Slice &data) {
-    size_t write_size = data.size();
-    const char *write_data = data.data();
+    const char *src = data.data();
+    size_t left = data.size();
 
-    // Fit as much as possible into buffer.
-    size_t copy_size = std::min(write_size, writable_file_buffer_size - pos_);
-    std::memcpy(buf_ + pos_, write_data, copy_size);
-    write_data += copy_size;
-    write_size -= copy_size;
-    pos_ += copy_size;
-    if (write_size == 0) {
-        return Status::ok();
+    while (left > 0) {
+        // Zero-Copy Direct I/O Fast Path
+        if (direct_io_ && buf_used_ == 0) {
+            bool is_src_aligned =
+                (reinterpret_cast<uintptr_t>(src) % 4096 == 0);
+            bool is_offset_aligned = (filesize_ % 4096 == 0);
+            bool is_len_aligned = (left % 4096 == 0);
+
+            if (is_src_aligned && is_offset_aligned && is_len_aligned) {
+                Status s = submit_write_(src, left, filesize_);
+                if (!s.is_ok())
+                    return s;
+                filesize_ += left;
+                return Status::ok();
+            }
+        }
+
+        // Staging Path (through polymorphic AlignedBuffer base class
+        // interface)
+        size_t buf_space = buf_->capacity() - buf_used_;
+        size_t bytes_to_copy = std::min(left, buf_space);
+
+        std::memcpy(buf_->data() + buf_used_, src, bytes_to_copy);
+        buf_used_ += bytes_to_copy;
+        src += bytes_to_copy;
+        left -= bytes_to_copy;
+        filesize_ += bytes_to_copy;
+
+        if (buf_used_ == buf_->capacity()) {
+            Status s = flush_buffer();
+            if (!s.is_ok())
+                return s;
+        }
     }
 
-    // Can't fit in buffer, so need to do at least one write.
-    Status status = flush_buffer();
-    if (!status.is_ok()) {
-        return status;
-    }
-
-    // Small writes go to buffer, large writes are written directly.
-    if (write_size < writable_file_buffer_size) {
-        std::memcpy(buf_, write_data, write_size);
-        pos_ = write_size;
-        return Status::ok();
-    }
-    return write_unbuffered(write_data, write_size);
+    return Status::ok();
 }
 
 // Flushes any buffered data and closes the underlying file descriptor.
 Status PosixWritableFile::close() {
-    Status status = flush_buffer();
-    const int close_result = ::close(fd_);
-    if (close_result < 0 && status.is_ok()) {
-        status = posix_error(filename_, errno);
+    Status s = flush_buffer();
+
+    if (direct_io_ && s.is_ok()) {
+        if (::ftruncate(fd_, filesize_) < 0) {
+            s = posix_error(filename_, errno);
+        }
     }
-    fd_ = -1;
-    return status;
+
+    if (fd_ >= 0) {
+        if (::close(fd_) < 0 && s.is_ok()) {
+            s = posix_error(filename_, errno);
+        }
+    }
+
+    return s;
 }
 
 // Flushes buffered data and synchronises both the file and (if this is the
 // manifest) its parent directory to durable storage.
 Status PosixWritableFile::sync() {
-    Status status = sync_dir_if_manifest();
-    if (!status.is_ok()) {
-        return status;
+    Status s = flush_buffer();
+    if (!s.is_ok())
+        return s;
+
+    if (::fdatasync(fd_) < 0) {
+        return posix_error(filename_, errno);
     }
 
-    status = flush_buffer();
-    if (!status.is_ok()) {
-        return status;
-    }
-
-    return sync_fd(fd_, filename_);
+    return Status::ok();
 }
 
-// Writes data directly to the file descriptor, retrying on EINTR until all
-// bytes have been written or a fatal error occurs.
-Status PosixWritableFile::write_unbuffered(const char *data, size_t size) {
-    while (size > 0) {
-        ssize_t write_result = ::write(fd_, data, size);
-        if (write_result < 0) {
-            if (errno == EINTR) {
-                continue; // Retry
-            }
-            return posix_error(filename_, errno);
+Status PosixWritableFile::flush_buffer() {
+    if (buf_used_ == 0)
+        return Status::ok();
+
+    size_t bytes_to_write = buf_used_;
+    uint64_t write_offset = filesize_ - buf_used_;
+
+    if (direct_io_) {
+        size_t remainder = buf_used_ % 4096;
+        if (remainder != 0) {
+            size_t padded_size = buf_used_ + (4096 - remainder);
+            std::memset(buf_->data() + buf_used_, 0, 4096 - remainder);
+            bytes_to_write = padded_size;
         }
-        data += write_result;
-        size -= write_result;
     }
+
+    Status s = submit_write_(buf_->data(), bytes_to_write, write_offset);
+    if (!s.is_ok())
+        return s;
+
+    buf_used_ = 0;
     return Status::ok();
 }
 
@@ -218,7 +479,7 @@ Status PosixWritableFile::sync_dir_if_manifest() {
         return status;
     }
 
-    int fd = ::open(dirname_.c_str(), O_RDONLY);
+    int fd = ::open(dirname_.c_str(), O_RDONLY | O_CLOEXEC);
     if (fd < 0) {
         status = posix_error(dirname_, errno);
     } else {

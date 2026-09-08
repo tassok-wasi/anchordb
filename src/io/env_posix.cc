@@ -12,19 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "anchordb/env.h"
 #include "io/env_posix.h"
 
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <fcntl.h>
 
 namespace anchordb {
 
 PosixEnv::PosixEnv() : PosixEnv(1000, 256, false) {}
 
-PosixEnv::PosixEnv(int max_open_files, uint32_t ring_entries,
-                   bool direct_io_enabled)
-    : direct_io_enabled_(direct_io_enabled), ring_entries_(ring_entries),
+PosixEnv::PosixEnv(int max_open_files, uint32_t ring_entries, bool direct_io)
+    : direct_io_(direct_io), ring_entries_(ring_entries),
       fd_limiter_(max_open_files) {
     int ret = io_uring_queue_init(ring_entries, &default_ring_, 0);
     if (ret < 0) {
@@ -37,13 +38,13 @@ PosixEnv::~PosixEnv() {
     // Signal background worker threads to stop after finishing remaining
     // work
     {
-        std::lock_guard<std::mutex> lock(background_work_mutex_);
+        std::lock_guard<std::mutex> lock(bg_work_mutex_);
         shutting_down_ = true;
-        background_work_cv_.notify_all();
+        bg_work_cv_.notify_all();
     }
 
     // Join background worker threads
-    for (std::thread &th : background_threads_) {
+    for (std::thread &th : bg_threads_) {
         if (th.joinable()) {
             th.join();
         }
@@ -53,7 +54,7 @@ PosixEnv::~PosixEnv() {
     io_uring_queue_exit(&default_ring_);
 
     // Destroy all registered thread-local rings
-    std::lock_guard<std::mutex> lock(tls_rings_mutex_);
+    std::lock_guard<std::mutex> lock(tls_ring_mutex_);
     for (struct io_uring *ring : registered_tls_rings_) {
         if (ring) {
             io_uring_queue_exit(ring);
@@ -75,7 +76,7 @@ struct io_uring *PosixEnv::get_thread_local_ring() {
             return &default_ring_;
         }
 
-        std::lock_guard<std::mutex> lock(tls_rings_mutex_);
+        std::lock_guard<std::mutex> lock(tls_ring_mutex_);
         registered_tls_rings_.push_back(tls_ring);
     }
     return tls_ring;
@@ -83,12 +84,20 @@ struct io_uring *PosixEnv::get_thread_local_ring() {
 
 Status PosixEnv::new_sequential_read_file(const std::string &filename,
                                           SequentialReadFile **result) {
-    int fd = ::open(filename.c_str(), O_RDONLY | O_CLOEXEC);
+    int flags = O_RDONLY | O_CLOEXEC;
+    if (direct_io_) {
+        flags |= O_DIRECT;
+    }
+
+    int fd = ::open(filename.c_str(), flags, 0);
     if (fd < 0) {
-        *result = nullptr;
         return posix_error(filename, errno);
     }
-    *result = new PosixSequentialReadFile(filename, fd);
+
+    struct io_uring *ring = get_thread_local_ring();
+    *result =
+        new PosixSequentialReadFile(filename, fd, ring, nullptr, direct_io_);
+
     return Status::ok();
 }
 
@@ -97,12 +106,10 @@ Status PosixEnv::new_random_access_file(const std::string &filename,
     int fd = -1;
 
     if (fd_limiter_.acquire()) {
-        int flags = O_RDONLY;
-        if (direct_io_enabled_) {
+        int flags = O_RDONLY | O_CLOEXEC;
+        if (direct_io_) {
             flags |= O_DIRECT;
         }
-
-        flags |= O_CLOEXEC;
 
         fd = ::open(filename.c_str(), flags, 0644);
         if (fd < 0) {
@@ -114,38 +121,69 @@ Status PosixEnv::new_random_access_file(const std::string &filename,
     }
 
     // Obtain the calling thread's dedicated lock-free io_uring ring
-    struct io_uring *target_ring = get_thread_local_ring();
-    if (!target_ring) {
-        target_ring = &default_ring_; // Fallback to shared ring if TLS
-                                      // allocation fails
+    struct io_uring *ring = get_thread_local_ring();
+    if (!ring) {
+        ring = &default_ring_;
     }
 
-    *result = new PosixRandomAccessFile(filename, fd, &fd_limiter_, target_ring,
-                                        direct_io_enabled_);
+    *result =
+        new PosixRandomAccessFile(filename, fd, &fd_limiter_, ring, direct_io_);
     return Status::ok();
 }
 
 Status PosixEnv::new_writable_file(const std::string &filename,
-                                   WritableFile **result) {
-    int fd = ::open(filename.c_str(), O_TRUNC | O_WRONLY | O_CREAT | O_CLOEXEC,
-                    0644);
+                                   AlignedBuffer **buf, WritableFile **result) {
+    int flags = O_CREAT | O_WRONLY | O_TRUNC | O_CLOEXEC;
+    if (direct_io_) {
+        flags |= O_DIRECT;
+    }
+
+    int fd = ::open(filename.c_str(), flags, 0644);
     if (fd < 0) {
-        *result = nullptr;
         return posix_error(filename, errno);
     }
-    *result = new PosixWritableFile(filename, fd);
+
+    // Obtain the calling thread's dedicated lock-free io_uring ring
+    struct io_uring *ring = get_thread_local_ring();
+    if (!ring) {
+        ring = &default_ring_;
+    }
+
+    *result = new PosixWritableFile(filename, fd, ring, buf, direct_io_);
+
     return Status::ok();
 }
 
 Status PosixEnv::new_appendable_file(const std::string &filename,
+                                     AlignedBuffer **buf,
                                      WritableFile **result) {
-    int fd = ::open(filename.c_str(), O_APPEND | O_WRONLY | O_CREAT | O_CLOEXEC,
-                    0644);
+    int flags = O_CREAT | O_WRONLY | O_APPEND | O_CLOEXEC;
+    if (direct_io_) {
+        flags |= O_DIRECT;
+    }
+
+    int fd = ::open(filename.c_str(), flags, 0644);
     if (fd < 0) {
-        *result = nullptr;
         return posix_error(filename, errno);
     }
-    *result = new PosixWritableFile(filename, fd);
+
+    // Obtain the calling thread's dedicated lock-free io_uring ring
+    struct io_uring *ring = get_thread_local_ring();
+    if (!ring) {
+        ring = &default_ring_;
+    }
+
+    PosixWritableFile *file =
+        new PosixWritableFile(filename, fd, ring, buf, direct_io_);
+
+    uint64_t file_size = 0;
+    Status s = get_file_size(filename, &file_size);
+    if (!s.is_ok()) {
+        delete file;
+        return s;
+    }
+
+    *result = file;
     return Status::ok();
 }
 
@@ -243,21 +281,21 @@ Status PosixEnv::unlock_file(FileLock *lock) {
 }
 
 void PosixEnv::schedule(void (*function)(void *arg), void *arg) {
-    std::lock_guard<std::mutex> lock(background_work_mutex_);
+    std::lock_guard<std::mutex> lock(bg_work_mutex_);
 
     // Lazy-start the dedicated background execution thread on first
     // scheduled job
-    if (!background_threads_started_) {
-        background_threads_started_ = true;
-        background_threads_.emplace_back([this] { background_thread_main(); });
+    if (!bg_threads_started_) {
+        bg_threads_started_ = true;
+        bg_threads_.emplace_back([this] { bg_thread_main(); });
     }
 
     // Queue the task
-    background_work_queue_.push(BackgroundTask{function, arg});
-    background_work_cv_.notify_one();
+    bg_work_queue_.push(BackgroundTask{function, arg});
+    bg_work_cv_.notify_one();
 }
 
-void PosixEnv::background_thread_main() {
+void PosixEnv::bg_thread_main() {
     // Note: When this background worker thread starts executing tasks,
     // any call to GetThreadLocalRing() will automatically initialize
     // a dedicated thread-local io_uring ring and register it inside
@@ -266,17 +304,17 @@ void PosixEnv::background_thread_main() {
     while (true) {
         BackgroundTask task;
         {
-            std::unique_lock<std::mutex> lock(background_work_mutex_);
-            background_work_cv_.wait(lock, [this] {
-                return shutting_down_ || !background_work_queue_.empty();
+            std::unique_lock<std::mutex> lock(bg_work_mutex_);
+            bg_work_cv_.wait(lock, [this] {
+                return shutting_down_ || !bg_work_queue_.empty();
             });
 
-            if (shutting_down_ && background_work_queue_.empty()) {
+            if (shutting_down_ && bg_work_queue_.empty()) {
                 return;
             }
 
-            task = background_work_queue_.front();
-            background_work_queue_.pop();
+            task = bg_work_queue_.front();
+            bg_work_queue_.pop();
         }
 
         // Execute background callback

@@ -17,6 +17,7 @@
 #include "anchordb/env.h"
 #include "anchordb/slice.h"
 #include "anchordb/status.h"
+#include "io/aligned_buf.h"
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -29,7 +30,8 @@
 
 namespace anchordb {
 // Size of the internal write buffer used by PosixWritableFile.
-constexpr const size_t writable_file_buffer_size = 65536;
+constexpr const size_t k_writable_file_buffer_size = 65536;
+constexpr const size_t k_direct_io_alignment = 4096;
 
 // Constructs a Status from a POSIX error number, incorporating |context|
 // into the error message for diagnostic purposes.
@@ -87,11 +89,28 @@ class PosixSequentialReadFile final : public SequentialReadFile {
   public:
     // Constructs a PosixSequentialReadFile that takes ownership of |fd|.
     // |filename| is kept for error reporting purposes.
-    PosixSequentialReadFile(std::string filename, int fd)
-        : fd_(fd), filename_(std::move(filename)) {}
+    PosixSequentialReadFile(std::string filename, int fd, struct io_uring *ring,
+                            AlignedBuffer **buf = nullptr,
+                            bool direct_io = true)
+        : fd_(fd), filename_(std::move(filename)), ring_(ring), offset_(0),
+          direct_io_(direct_io), staging_buf_(nullptr) {
+        if (buf != nullptr && *buf != nullptr) {
+            staging_buf_ = std::move(*buf);
+            delete buf;
+        } else if (direct_io_) {
+            // Allocate default 64 KiB sector-aligned buffer for direct I/O
+            // staging
+            staging_buf_ = new DefaultAlignedBuffer(k_writable_file_buffer_size,
+                                                    k_direct_io_alignment);
+        }
+    }
 
     // Closes the underlying file descriptor.
-    ~PosixSequentialReadFile() { close(fd_); }
+    ~PosixSequentialReadFile() override {
+        if (fd_ >= 0) {
+            ::close(fd_);
+        }
+    }
 
     // Reads up to |n| bytes from the file into |scratch|. Sets |*result| to
     // the data that was actually read. Returns OK on success, or a non-OK
@@ -103,8 +122,16 @@ class PosixSequentialReadFile final : public SequentialReadFile {
     Status skip(uint64_t n) override;
 
   private:
-    const int fd_;         // Underlying file descriptor; owned by this object.
-    std::string filename_; // File name used for diagnostic messages.
+    Status submit_read_(void *dst, size_t len, uint64_t offset,
+                        size_t *bytes_read);
+
+    const int fd_;
+    const std::string filename_;
+    struct io_uring *const ring_;
+    uint64_t offset_;
+    const bool direct_io_;
+
+    AlignedBuffer *staging_buf_;
 };
 
 // PosixRandomAccessFile provides random read access to a file identified by
@@ -123,7 +150,7 @@ class PosixRandomAccessFile final : public RandomAccessFile {
     //          when has_permanent_fd_ is true.
     // |ring| is a io_uring instance for async reads.
     PosixRandomAccessFile(std::string filename, int fd, Limiter *limiter,
-                          struct io_uring *ring, bool direct_io = false)
+                          struct io_uring *ring, bool direct_io = true)
         : filename_(std::move(filename)), has_permanent_fd_(fd >= 0), fd_(fd),
           limiter_(limiter), ring_(ring), direct_io_(direct_io) {}
 
@@ -142,9 +169,12 @@ class PosixRandomAccessFile final : public RandomAccessFile {
     // Sets |*result| to the data actually read. Returns OK on success,
     // or a non-OK Status on failure (including short reads).
     Status read(uint64_t offset, size_t n, Slice *result,
-                char *scratch) const override;
+                char *scratch) override;
 
   private:
+    Status submit_read_(int fd, void *buf, size_t n, uint64_t offset,
+                        size_t *bytes_read);
+
     const std::string filename_;  // File name for diagnostic messages.
     const bool has_permanent_fd_; // True if this object owns |fd_|.
     const int fd_;                // Valid only when has_permanent_fd_ == true.
@@ -160,15 +190,30 @@ class PosixRandomAccessFile final : public RandomAccessFile {
 // and, for MANIFEST files, syncing the parent directory to ensure durability.
 class PosixWritableFile final : public WritableFile {
   public:
-    // Constructs a PosixWritableFile that takes ownership of |fd|.
+    // Constructs a PosixWritableFile.
     // |filename| is kept for error reporting and to determine if this is a
-    // MANIFEST file (which requires an additional directory fsync on sync()).
-    PosixWritableFile(std::string filename, int fd)
-        : pos_(0), fd_(fd), is_manifest_(is_manifest(filename)),
-          filename_(std::move(filename)), dirname_(dirname(filename_)) {}
+    // MANIFEST file (which requires an additional directory fsync on sync())..
+    // |fd| is the target open file descriptor.
+    // |env| is a non-owning pointer to the parent PosixEnv.
+    // |buf| is an optional caller-supplied or factory-allocated AlignedBuffer
+    // pointer. |direct_io| enables O_DIRECT operational rules.
 
-    // Closes the underlying file descriptor, flushing any buffered data first.
-    ~PosixWritableFile() {
+    PosixWritableFile(std::string filename, int fd, struct io_uring *ring,
+                      AlignedBuffer **buf = nullptr, bool direct_io = true)
+        : filename_(std::move(filename)), fd_(fd), ring_(ring), filesize_(0),
+          direct_io_(direct_io), buf_(nullptr), buf_used_(0),
+          is_manifest_(is_manifest(filename_)), dirname_(dirname(filename_)) {
+        if (buf != nullptr && *buf != nullptr) {
+            buf_ = std::move(*buf);
+            delete buf;
+        } else {
+            // Allocate concrete default aligned buffer if none was provided
+            buf_ = new DefaultAlignedBuffer(k_writable_file_buffer_size,
+                                            k_direct_io_alignment);
+        }
+    }
+
+    ~PosixWritableFile() override {
         if (fd_ >= 0) {
             close();
         }
@@ -179,14 +224,14 @@ class PosixWritableFile final : public WritableFile {
     // called. Returns OK on success, or a non-OK Status on failure.
     Status append(const Slice &data) override;
 
-    // Closes the file, flushing any buffered data before closing the file
-    // descriptor. Returns OK on success, or a non-OK Status on failure.
-    Status close() override;
-
     // Flushes any buffered data to the underlying file descriptor. Does not
     // guarantee the data is persisted to disk (see sync()). Returns OK on
     // success, or a non-OK Status on failure.
     Status flush() override { return flush_buffer(); }
+
+    // Closes the file, flushing any buffered data before closing the file
+    // descriptor. Returns OK on success, or a non-OK Status on failure.
+    Status close() override;
 
     // Flushes buffered data and calls fsync on the file descriptor. For
     // MANIFEST files, also fsyncs the parent directory to ensure the directory
@@ -194,19 +239,12 @@ class PosixWritableFile final : public WritableFile {
     Status sync() override;
 
   private:
+    Status submit_write_(const char *src, size_t len, uint64_t offset);
+
     // Writes the contents of the internal buffer to the file descriptor and
     // resets the buffer position. Returns OK on success, or a non-OK Status
     // on failure.
-    Status flush_buffer() {
-        Status status = write_unbuffered(buf_, pos_);
-        pos_ = 0;
-        return status;
-    }
-
-    // Performs an unbuffered write of |size| bytes from |data| to the
-    // underlying file descriptor. Returns OK on success, or a non-OK Status
-    // on failure (including partial writes).
-    Status write_unbuffered(const char *data, size_t size);
+    Status flush_buffer();
 
     // If this file is a MANIFEST file, fsyncs the parent directory to ensure
     // the directory entry is durable after a rename or creation.
@@ -230,26 +268,15 @@ class PosixWritableFile final : public WritableFile {
         return basename(filename).starts_with("MANIFEST");
     }
 
-    // Internal write buffer. Data is accumulated here before being flushed
-    // to the file descriptor.
-    char buf_[writable_file_buffer_size];
-
-    // Current write position within |buf_| (number of valid bytes buffered).
-    size_t pos_;
-
-    // Underlying file descriptor; owned by this object.
-    int fd_;
-
-    // Whether this file is a MANIFEST file. If true, sync() will also fsync
-    // the parent directory.
-    const bool is_manifest_;
-
-    // File name used for diagnostic/error messages.
     const std::string filename_;
-
-    // Parent directory of |filename_|; used for directory fsync on MANIFEST
-    // files.
+    const bool is_manifest_;
     const std::string dirname_;
+    int fd_;
+    struct io_uring *const ring_;
+    uint64_t filesize_;
+    const bool direct_io_;
+    AlignedBuffer *buf_;
+    size_t buf_used_;
 };
 
 // Locks or unlocks the file referenced by |fd|. If |lock| is true, an
