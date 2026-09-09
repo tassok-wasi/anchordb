@@ -41,18 +41,17 @@ class ANCHORDB_EXPORT Env {
 
     static Env *default_env();
 
-    virtual AlignedBuffer *new_aligned_buffer(size_t capacity,
-                                              size_t alignment = 4096) = 0;
     virtual Status new_sequential_read_file(const std::string &fname,
-                                            SequentialReadFile **result) = 0;
+                                            SequentialReadFile **result,
+                                            size_t buffer_size = 0) = 0;
     virtual Status new_random_access_file(const std::string &fname,
                                           RandomAccessFile **result) = 0;
     virtual Status new_writable_file(const std::string &fname,
-                                     AlignedBuffer **buf,
-                                     WritableFile **result) = 0;
+                                     WritableFile **result,
+                                     size_t buffer_size = 0) = 0;
     virtual Status new_appendable_file(const std::string &fname,
-                                       AlignedBuffer **buf,
-                                       WritableFile **result) = 0;
+                                       WritableFile **result,
+                                       size_t buffer_size = 0) = 0;
 
     virtual bool file_exists(const std::string &fname) = 0;
     virtual Status get_children(const std::string &dir,
@@ -72,23 +71,6 @@ class ANCHORDB_EXPORT Env {
 
     virtual uint64_t now_micros() = 0;
     virtual void sleep_for_micros(int micros) = 0;
-};
-
-class ANCHORDB_EXPORT AlignedBuffer {
-  public:
-    AlignedBuffer() = default;
-    virtual ~AlignedBuffer() = default;
-
-    AlignedBuffer(const AlignedBuffer &) = delete;
-    AlignedBuffer &operator=(const AlignedBuffer &) = delete;
-
-    virtual void allocate(size_t capacity, size_t alignment) = 0;
-    virtual void free() = 0;
-
-    virtual char *data() const = 0;
-    virtual size_t capacity() const = 0;
-    virtual size_t alignment() const = 0;
-    virtual bool is_allocated() const = 0;
 };
 
 class ANCHORDB_EXPORT SequentialReadFile {
@@ -152,20 +134,21 @@ class ANCHORDB_EXPORT EnvWrapper : public Env {
 
     // The following text is boilerplate that forwards all methods to target().
     Status new_sequential_read_file(const std::string &f,
-                                    SequentialReadFile **r) override {
-        return target_->new_sequential_read_file(f, r);
+                                    SequentialReadFile **r,
+                                    size_t buffer_size = 0) override {
+        return target_->new_sequential_read_file(f, r, buffer_size);
     }
     Status new_random_access_file(const std::string &f,
                                   RandomAccessFile **r) override {
         return target_->new_random_access_file(f, r);
     }
-    Status new_writable_file(const std::string &f, AlignedBuffer **buf,
-                             WritableFile **r) override {
-        return target_->new_writable_file(f, buf, r);
+    Status new_writable_file(const std::string &f, WritableFile **r,
+                             size_t buffer_size = 0) override {
+        return target_->new_writable_file(f, r, buffer_size);
     }
-    Status new_appendable_file(const std::string &f, AlignedBuffer **buf,
-                               WritableFile **r) override {
-        return target_->new_appendable_file(f, buf, r);
+    Status new_appendable_file(const std::string &f, WritableFile **r,
+                               size_t buffer_size = 0) override {
+        return target_->new_appendable_file(f, r, buffer_size);
     }
     bool file_exists(const std::string &f) override {
         return target_->file_exists(f);

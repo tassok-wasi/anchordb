@@ -87,11 +87,27 @@ void put_fixed_64(std::string *dst, uint64_t value) {
 char *encode_varint_32(char *dst, uint32_t v) {
     uint8_t *ptr = reinterpret_cast<uint8_t *>(dst);
     static const int B = 128;
-    while (v >= B) {
-        *(ptr++) = (v & 0x7f) | B;
-        v >>= 7;
+    if (v < (1 << 7)) {
+        *(ptr++) = v;
+    } else if (v < (1 << 14)) {
+        *(ptr++) = v | B;
+        *(ptr++) = v >> 7;
+    } else if (v < (1 << 21)) {
+        *(ptr++) = v | B;
+        *(ptr++) = (v >> 7) | B;
+        *(ptr++) = v >> 14;
+    } else if (v < (1 << 28)) {
+        *(ptr++) = v | B;
+        *(ptr++) = (v >> 7) | B;
+        *(ptr++) = (v >> 14) | B;
+        *(ptr++) = v >> 21;
+    } else {
+        *(ptr++) = v | B;
+        *(ptr++) = (v >> 7) | B;
+        *(ptr++) = (v >> 14) | B;
+        *(ptr++) = (v >> 21) | B;
+        *(ptr++) = v >> 28;
     }
-    *(ptr++) = v;
     return reinterpret_cast<char *>(ptr);
 }
 
@@ -99,39 +115,93 @@ char *encode_varint_32(char *dst, uint32_t v) {
 // Same scheme as varint32 but can produce up to 10 bytes.
 char *encode_varint_64(char *dst, uint64_t v) {
     uint8_t *ptr = reinterpret_cast<uint8_t *>(dst);
-    static const int B = 128;
-    while (v >= B) {
-        *(ptr++) = (v & 0x7f) | B;
-        v >>= 7;
-    }
-    *(ptr++) = v;
-    return reinterpret_cast<char *>(ptr);
-}
+    static const uint8_t B = 128;
 
-// Decodes a varint32 from ptr.  No bounds checking — caller must guarantee
-// the varint is complete and well-formed.
-uint32_t decode_varint_32(const char *ptr) {
-    uint32_t result = 0;
-    const uint8_t *p = reinterpret_cast<const uint8_t *>(ptr);
-    while (*p & 128) {
-        result |= (*p & 0x7f);
-        p++;
+    if (v < (1ull << 7)) {
+        ptr[0] = static_cast<uint8_t>(v);
+        return reinterpret_cast<char *>(ptr + 1);
     }
-    result |= *p;
-    return result;
-}
+    if (v < (1ull << 14)) {
+        ptr[0] = static_cast<uint8_t>(v | B);
+        ptr[1] = static_cast<uint8_t>(v >> 7);
+        return reinterpret_cast<char *>(ptr + 2);
+    }
+    if (v < (1ull << 21)) {
+        ptr[0] = static_cast<uint8_t>(v | B);
+        ptr[1] = static_cast<uint8_t>((v >> 7) | B);
+        ptr[2] = static_cast<uint8_t>(v >> 14);
+        return reinterpret_cast<char *>(ptr + 3);
+    }
+    if (v < (1ull << 28)) {
+        ptr[0] = static_cast<uint8_t>(v | B);
+        ptr[1] = static_cast<uint8_t>((v >> 7) | B);
+        ptr[2] = static_cast<uint8_t>((v >> 14) | B);
+        ptr[3] = static_cast<uint8_t>(v >> 21);
+        return reinterpret_cast<char *>(ptr + 4);
+    }
+    if (v < (1ull << 35)) {
+        ptr[0] = static_cast<uint8_t>(v | B);
+        ptr[1] = static_cast<uint8_t>((v >> 7) | B);
+        ptr[2] = static_cast<uint8_t>((v >> 14) | B);
+        ptr[3] = static_cast<uint8_t>((v >> 21) | B);
+        ptr[4] = static_cast<uint8_t>(v >> 28);
+        return reinterpret_cast<char *>(ptr + 5);
+    }
+    if (v < (1ull << 42)) {
+        ptr[0] = static_cast<uint8_t>(v | B);
+        ptr[1] = static_cast<uint8_t>((v >> 7) | B);
+        ptr[2] = static_cast<uint8_t>((v >> 14) | B);
+        ptr[3] = static_cast<uint8_t>((v >> 21) | B);
+        ptr[4] = static_cast<uint8_t>((v >> 28) | B);
+        ptr[5] = static_cast<uint8_t>(v >> 35);
+        return reinterpret_cast<char *>(ptr + 6);
+    }
+    if (v < (1ull << 49)) {
+        ptr[0] = static_cast<uint8_t>(v | B);
+        ptr[1] = static_cast<uint8_t>((v >> 7) | B);
+        ptr[2] = static_cast<uint8_t>((v >> 14) | B);
+        ptr[3] = static_cast<uint8_t>((v >> 21) | B);
+        ptr[4] = static_cast<uint8_t>((v >> 28) | B);
+        ptr[5] = static_cast<uint8_t>((v >> 35) | B);
+        ptr[6] = static_cast<uint8_t>(v >> 42);
+        return reinterpret_cast<char *>(ptr + 7);
+    }
+    if (v < (1ull << 56)) {
+        ptr[0] = static_cast<uint8_t>(v | B);
+        ptr[1] = static_cast<uint8_t>((v >> 7) | B);
+        ptr[2] = static_cast<uint8_t>((v >> 14) | B);
+        ptr[3] = static_cast<uint8_t>((v >> 21) | B);
+        ptr[4] = static_cast<uint8_t>((v >> 28) | B);
+        ptr[5] = static_cast<uint8_t>((v >> 35) | B);
+        ptr[6] = static_cast<uint8_t>((v >> 42) | B);
+        ptr[7] = static_cast<uint8_t>(v >> 49);
+        return reinterpret_cast<char *>(ptr + 8);
+    }
+    if (v < (1ull << 63)) {
+        ptr[0] = static_cast<uint8_t>(v | B);
+        ptr[1] = static_cast<uint8_t>((v >> 7) | B);
+        ptr[2] = static_cast<uint8_t>((v >> 14) | B);
+        ptr[3] = static_cast<uint8_t>((v >> 21) | B);
+        ptr[4] = static_cast<uint8_t>((v >> 28) | B);
+        ptr[5] = static_cast<uint8_t>((v >> 35) | B);
+        ptr[6] = static_cast<uint8_t>((v >> 42) | B);
+        ptr[7] = static_cast<uint8_t>((v >> 49) | B);
+        ptr[8] = static_cast<uint8_t>(v >> 56);
+        return reinterpret_cast<char *>(ptr + 9);
+    }
 
-// Decodes a varint64 from ptr.  No bounds checking — caller must guarantee
-// the varint is complete and well-formed.
-uint64_t decode_varint_64(const char *ptr) {
-    uint64_t result = 0;
-    const uint8_t *p = reinterpret_cast<const uint8_t *>(ptr);
-    while (*p & 128) {
-        result |= (*p & 0x7f);
-        p++;
-    }
-    result |= *p;
-    return result;
+    // 10-byte fallback for values >= 2^63 (e.g. max uint64_t)
+    ptr[0] = static_cast<uint8_t>(v | B);
+    ptr[1] = static_cast<uint8_t>((v >> 7) | B);
+    ptr[2] = static_cast<uint8_t>((v >> 14) | B);
+    ptr[3] = static_cast<uint8_t>((v >> 21) | B);
+    ptr[4] = static_cast<uint8_t>((v >> 28) | B);
+    ptr[5] = static_cast<uint8_t>((v >> 35) | B);
+    ptr[6] = static_cast<uint8_t>((v >> 42) | B);
+    ptr[7] = static_cast<uint8_t>((v >> 49) | B);
+    ptr[8] = static_cast<uint8_t>((v >> 56) | B);
+    ptr[9] = static_cast<uint8_t>(v >> 63);
+    return reinterpret_cast<char *>(ptr + 10);
 }
 
 // Appends a varint32 encoding of value to *dst.
@@ -166,51 +236,114 @@ int varint_len(uint64_t v) {
     return len;
 }
 
-// Fallback varint32 decoder with bounds checking.  Reads bytes from [p, limit),
-// stopping when a byte with MSB clear is found.  Returns nullptr if the varint
-// is truncated (no terminator byte before limit).
 const char *get_varint_32_ptr_fallback(const char *p, const char *limit,
                                        uint32_t *value) {
-    uint32_t result = 0;
-    const uint8_t *ptr = reinterpret_cast<const uint8_t *>(p);
-    while (ptr < reinterpret_cast<const uint8_t *>(limit) && *ptr & 128) {
-        result |= (*ptr & 0x7f);
-        ptr++;
-    }
-    if (ptr == reinterpret_cast<const uint8_t *>(limit)) {
+    const auto *ptr = reinterpret_cast<const uint8_t *>(p);
+    const auto *lim = reinterpret_cast<const uint8_t *>(limit);
+
+    if (ptr >= lim)
         return nullptr;
+
+    uint32_t b0 = *ptr++;
+    uint32_t result = b0 & 0x7f;
+    if ((b0 & 0x80) == 0) {
+        *value = result;
+        return reinterpret_cast<const char *>(ptr);
     }
-    result |= *ptr;
-    *value = result;
-    return reinterpret_cast<const char *>(ptr + 1);
+
+    if (ptr >= lim)
+        return nullptr;
+    uint32_t b1 = *ptr++;
+    result |= (b1 & 0x7f) << 7;
+    if ((b1 & 0x80) == 0) {
+        *value = result;
+        return reinterpret_cast<const char *>(ptr);
+    }
+
+    if (ptr >= lim)
+        return nullptr;
+    uint32_t b2 = *ptr++;
+    result |= (b2 & 0x7f) << 14;
+    if ((b2 & 0x80) == 0) {
+        *value = result;
+        return reinterpret_cast<const char *>(ptr);
+    }
+
+    if (ptr >= lim)
+        return nullptr;
+    uint32_t b3 = *ptr++;
+    result |= (b3 & 0x7f) << 21;
+    if ((b3 & 0x80) == 0) {
+        *value = result;
+        return reinterpret_cast<const char *>(ptr);
+    }
+
+    if (ptr >= lim)
+        return nullptr;
+    uint32_t b4 = *ptr++;
+    result |= b4 << 28; // 5th byte holds the remaining bits
+    if ((b4 & 0x80) == 0) {
+        *value = result;
+        return reinterpret_cast<const char *>(ptr);
+    }
+
+    return nullptr; // Corrupted varint (spans > 5 bytes for uint32)
 }
 
-// Fallback varint64 decoder with bounds checking.  Same logic as the 32-bit
-// version but returns a uint64_t.
 const char *get_varint_64_ptr_fallback(const char *p, const char *limit,
                                        uint64_t *value) {
-    uint64_t result = 0;
-    const uint8_t *ptr = reinterpret_cast<const uint8_t *>(p);
-    while (ptr < reinterpret_cast<const uint8_t *>(limit) && *ptr & 128) {
-        result |= (*ptr & 0x7f);
-        ptr++;
-    }
-    if (ptr == reinterpret_cast<const uint8_t *>(limit)) {
+    const auto *ptr = reinterpret_cast<const uint8_t *>(p);
+    const auto *lim = reinterpret_cast<const uint8_t *>(limit);
+
+    if (ptr >= lim)
         return nullptr;
+
+    // Unroll the first 3 bytes (handles values up to ~2 million)
+    uint64_t b0 = *ptr++;
+    uint64_t result = b0 & 0x7f;
+    if ((b0 & 0x80) == 0) {
+        *value = result;
+        return reinterpret_cast<const char *>(ptr);
     }
-    result |= *ptr;
-    *value = result;
-    return reinterpret_cast<const char *>(ptr + 1);
+
+    if (ptr >= lim)
+        return nullptr;
+    uint64_t b1 = *ptr++;
+    result |= (b1 & 0x7f) << 7;
+    if ((b1 & 0x80) == 0) {
+        *value = result;
+        return reinterpret_cast<const char *>(ptr);
+    }
+
+    if (ptr >= lim)
+        return nullptr;
+    uint64_t b2 = *ptr++;
+    result |= (b2 & 0x7f) << 14;
+    if ((b2 & 0x80) == 0) {
+        *value = result;
+        return reinterpret_cast<const char *>(ptr);
+    }
+
+    // Hybrid loop fallback for bytes 4 through 10
+    uint32_t shift = 21;
+    while (ptr < lim && shift <= 63) {
+        uint64_t b = *ptr++;
+        result |= (b & 0x7f) << shift;
+        if ((b & 0x80) == 0) {
+            *value = result;
+            return reinterpret_cast<const char *>(ptr);
+        }
+        shift += 7;
+    }
+
+    return nullptr; // Corrupted varint or buffer overflow
 }
 
-// Bounds-checked varint32 decoder with a fast path: if the first byte has
-// MSB clear, the varint is a single byte and we return immediately.
-// Otherwise falls back to get_varint_32_ptr_fallback.
 const char *get_varint_32_ptr(const char *p, const char *limit,
                               uint32_t *value) {
     if (p < limit) {
-        uint32_t result = *(reinterpret_cast<const uint8_t *>(p));
-        if ((result & 128) == 0) {
+        uint32_t result = *reinterpret_cast<const uint8_t *>(p);
+        if ((result & 0x80) == 0) {
             *value = result;
             return p + 1;
         }
@@ -218,12 +351,11 @@ const char *get_varint_32_ptr(const char *p, const char *limit,
     return get_varint_32_ptr_fallback(p, limit, value);
 }
 
-// Bounds-checked varint64 decoder with the same fast-path optimization.
 const char *get_varint_64_ptr(const char *p, const char *limit,
                               uint64_t *value) {
     if (p < limit) {
-        uint64_t result = *(reinterpret_cast<const uint8_t *>(p));
-        if ((result & 128) == 0) {
+        uint64_t result = *reinterpret_cast<const uint8_t *>(p);
+        if ((result & 0x80) == 0) {
             *value = result;
             return p + 1;
         }
@@ -231,32 +363,26 @@ const char *get_varint_64_ptr(const char *p, const char *limit,
     return get_varint_64_ptr_fallback(p, limit, value);
 }
 
-// Decodes a varint32 from the front of *input, advancing the Slice past the
-// consumed bytes.  Returns false if the varint is truncated.
 bool get_varint_32(Slice *input, uint32_t *value) {
     const char *p = input->data();
     const char *limit = p + input->size();
     const char *ptr = get_varint_32_ptr(p, limit, value);
     if (ptr == nullptr) {
         return false;
-    } else {
-        *input = Slice(ptr, limit - ptr);
-        return true;
     }
+    *input = Slice(ptr, limit - ptr);
+    return true;
 }
 
-// Decodes a varint64 from the front of *input, advancing the Slice past the
-// consumed bytes.  Returns false if the varint is truncated.
 bool get_varint_64(Slice *input, uint64_t *value) {
     const char *p = input->data();
     const char *limit = p + input->size();
     const char *ptr = get_varint_64_ptr(p, limit, value);
     if (ptr == nullptr) {
         return false;
-    } else {
-        *input = Slice(ptr, limit - ptr);
-        return true;
     }
+    *input = Slice(ptr, limit - ptr);
+    return true;
 }
 
 // Reads a length-prefixed slice from *input.  On success, *result holds the

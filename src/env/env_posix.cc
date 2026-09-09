@@ -13,16 +13,18 @@
 // limitations under the License.
 
 #include "anchordb/env.h"
-#include "io/env_posix.h"
+#include "env/env_posix.h"
+#include "env/io_posix.h"
 
 #include <chrono>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <fcntl.h>
 
 namespace anchordb {
 
-PosixEnv::PosixEnv() : PosixEnv(1000, 256, false) {}
+PosixEnv::PosixEnv() : PosixEnv(1000, 256, true) {}
 
 PosixEnv::PosixEnv(int max_open_files, uint32_t ring_entries, bool direct_io)
     : direct_io_(direct_io), ring_entries_(ring_entries),
@@ -54,7 +56,7 @@ PosixEnv::~PosixEnv() {
     io_uring_queue_exit(&default_ring_);
 
     // Destroy all registered thread-local rings
-    std::lock_guard<std::mutex> lock(tls_ring_mutex_);
+    std::lock_guard<std::mutex> lock(tls_rings_mutex_);
     for (struct io_uring *ring : registered_tls_rings_) {
         if (ring) {
             io_uring_queue_exit(ring);
@@ -76,14 +78,15 @@ struct io_uring *PosixEnv::get_thread_local_ring() {
             return &default_ring_;
         }
 
-        std::lock_guard<std::mutex> lock(tls_ring_mutex_);
+        std::lock_guard<std::mutex> lock(tls_rings_mutex_);
         registered_tls_rings_.push_back(tls_ring);
     }
     return tls_ring;
 }
 
 Status PosixEnv::new_sequential_read_file(const std::string &filename,
-                                          SequentialReadFile **result) {
+                                          SequentialReadFile **result,
+                                          size_t buffer_size) {
     int flags = O_RDONLY | O_CLOEXEC;
     if (direct_io_) {
         flags |= O_DIRECT;
@@ -95,8 +98,13 @@ Status PosixEnv::new_sequential_read_file(const std::string &filename,
     }
 
     struct io_uring *ring = get_thread_local_ring();
-    *result =
-        new PosixSequentialReadFile(filename, fd, ring, nullptr, direct_io_);
+    if (!ring) {
+        ring = &default_ring_;
+    }
+    size_t buf_size =
+        (buffer_size != 0) ? buffer_size : k_sequential_read_file_buffer_size;
+    AlignedBuffer buf(buf_size, k_direct_io_alignment);
+    *result = new PosixSequentialReadFile(filename, fd, ring, &buf, direct_io_);
 
     return Status::ok();
 }
@@ -132,7 +140,7 @@ Status PosixEnv::new_random_access_file(const std::string &filename,
 }
 
 Status PosixEnv::new_writable_file(const std::string &filename,
-                                   AlignedBuffer **buf, WritableFile **result) {
+                                   WritableFile **result, size_t buffer_size) {
     int flags = O_CREAT | O_WRONLY | O_TRUNC | O_CLOEXEC;
     if (direct_io_) {
         flags |= O_DIRECT;
@@ -149,14 +157,17 @@ Status PosixEnv::new_writable_file(const std::string &filename,
         ring = &default_ring_;
     }
 
-    *result = new PosixWritableFile(filename, fd, ring, buf, direct_io_);
+    size_t buf_size =
+        (buffer_size != 0) ? buffer_size : k_sequential_read_file_buffer_size;
+    AlignedBuffer buf(buf_size, k_direct_io_alignment);
+    *result = new PosixWritableFile(filename, fd, ring, &buf, direct_io_);
 
     return Status::ok();
 }
 
 Status PosixEnv::new_appendable_file(const std::string &filename,
-                                     AlignedBuffer **buf,
-                                     WritableFile **result) {
+                                     WritableFile **result,
+                                     size_t buffer_size) {
     int flags = O_CREAT | O_WRONLY | O_APPEND | O_CLOEXEC;
     if (direct_io_) {
         flags |= O_DIRECT;
@@ -173,17 +184,18 @@ Status PosixEnv::new_appendable_file(const std::string &filename,
         ring = &default_ring_;
     }
 
-    PosixWritableFile *file =
-        new PosixWritableFile(filename, fd, ring, buf, direct_io_);
+    size_t buf_size =
+        (buffer_size != 0) ? buffer_size : k_sequential_read_file_buffer_size;
+    AlignedBuffer buf(buf_size, k_direct_io_alignment);
+    PosixWritableFile file(filename, fd, ring, &buf, direct_io_);
 
     uint64_t file_size = 0;
     Status s = get_file_size(filename, &file_size);
     if (!s.is_ok()) {
-        delete file;
         return s;
     }
 
-    *result = file;
+    *result = &file;
     return Status::ok();
 }
 
@@ -297,7 +309,7 @@ void PosixEnv::schedule(void (*function)(void *arg), void *arg) {
 
 void PosixEnv::bg_thread_main() {
     // Note: When this background worker thread starts executing tasks,
-    // any call to GetThreadLocalRing() will automatically initialize
+    // any call to get_thread_local_ring() will automatically initialize
     // a dedicated thread-local io_uring ring and register it inside
     // tls_rings_mutex_.
 

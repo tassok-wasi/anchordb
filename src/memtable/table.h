@@ -16,9 +16,9 @@
 
 #include "anchordb/slice.h"
 #include "anchordb/status.h"
-#include "memtable/arena.h"
-#include "memtable/key.h"
-#include "memtable/skiplist.h"
+#include "arena.h"
+#include "skiplist.h"
+#include "table_format.h"
 #include "util/coding.h"
 #include <cassert>
 #include <cstddef>
@@ -110,7 +110,7 @@ template <typename Comparator> class MemTable {
         //  key bytes    : char[internal_key.size()]
         //  tag          : uint64((sequence << 8) | type)
         //  value_size   : varint32 of value.size()
-        //  value bytes  : char[value.size()]
+        //  value bytes  : flag + char[value.size() - 1]
         size_t key_size = key.size();
         size_t value_size = value.size();
         size_t internal_key_size = key_size + 8;
@@ -134,11 +134,11 @@ template <typename Comparator> class MemTable {
         iter.seek(mem_key.data());
         if (iter.valid()) {
             // entry format is:
-            //    klength  varint32
-            //    userkey  char[klength]
-            //    tag      uint64
-            //    vlength  varint32
-            //    value    char[vlength]
+            //    klength  : varint32
+            //    userkey  : char[klength]
+            //    tag      : uint64
+            //    vlength  : varint32
+            //    value    : flag + char[vlength - 1]
             const char *entry = iter.key();
             uint32_t key_len;
             const char *key_ptr = get_varint_32_ptr(entry, entry + 5, &key_len);

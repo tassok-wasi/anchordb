@@ -16,7 +16,7 @@
 
 #include "anchordb/env.h"
 #include "anchordb/status.h"
-#include "io/io_posix.h"
+#include "env/io_posix.h"
 #include <bits/types/struct_timeval.h>
 #include <condition_variable>
 #include <cstdint>
@@ -58,13 +58,15 @@ class PosixEnv : public Env {
     // File creation and I/O
 
     Status new_sequential_read_file(const std::string &fname,
-                                    SequentialReadFile **result) override;
+                                    SequentialReadFile **result,
+                                    size_t buf_size = 0) override;
     Status new_random_access_file(const std::string &filename,
                                   RandomAccessFile **result) override;
-    Status new_writable_file(const std::string &filename, AlignedBuffer **buf,
-                             WritableFile **result) override;
-    Status new_appendable_file(const std::string &filename, AlignedBuffer **buf,
-                               WritableFile **result) override;
+    Status new_writable_file(const std::string &filename, WritableFile **result,
+                             size_t buf_size = 0) override;
+    Status new_appendable_file(const std::string &filename,
+                               WritableFile **result,
+                               size_t buf_size = 0) override;
 
     bool file_exists(const std::string &filename) override;
     Status get_children(const std::string &dir_path,
@@ -109,7 +111,7 @@ class PosixEnv : public Env {
 
     // io_uring infrastructure
     struct io_uring default_ring_{};
-    mutable std::mutex tls_ring_mutex_;
+    mutable std::mutex tls_rings_mutex_;
     std::vector<struct io_uring *> registered_tls_rings_;
 
     // Background thread pool

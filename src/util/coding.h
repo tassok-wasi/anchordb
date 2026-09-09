@@ -41,12 +41,6 @@ char *encode_varint_32(char *dst, uint32_t v);
 // Encodes v as a varint64 into dst.  Returns a pointer just past the last byte.
 char *encode_varint_64(char *dst, uint64_t v);
 
-// Decodes a varint32 from ptr.  Caller must ensure the varint is well-formed
-// (no bounds checking).
-uint32_t decode_varint_32(const char *ptr);
-// Decodes a varint64 from ptr.  Caller must ensure the varint is well-formed.
-uint64_t decode_varint_64(const char *ptr);
-
 // Appends a 4-byte little-endian encoding of value to *dst.
 void put_fixed_32(std::string *dst, uint32_t value);
 // Appends an 8-byte little-endian encoding of value to *dst.

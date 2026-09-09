@@ -25,14 +25,14 @@ class ANCHORDB_EXPORT Status {
     ~Status() { delete[] state_; }
 
     Status(const Status &rhs) {
-        state_ = (rhs.state_ == nullptr) ? nullptr : CopyState(rhs.state_);
+        state_ = (rhs.state_ == nullptr) ? nullptr : copy_state(rhs.state_);
     }
     Status &operator=(const Status &rhs) {
         // The following condition catches both aliasing (when this == &rhs),
         // and the common case where both rhs and *this are ok.
         if (state_ != rhs.state_) {
             delete[] state_;
-            state_ = (rhs.state_ == nullptr) ? nullptr : CopyState(rhs.state_);
+            state_ = (rhs.state_ == nullptr) ? nullptr : copy_state(rhs.state_);
         }
         return *this;
     }
@@ -101,7 +101,7 @@ class ANCHORDB_EXPORT Status {
     }
 
     Status(Code code, const Slice &msg, const Slice &msg2);
-    static const char *CopyState(const char *s);
+    static const char *copy_state(const char *s);
 
     // OK status has a null state_.  Otherwise, state_ is a new[] array
     // of the following form:

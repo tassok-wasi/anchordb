@@ -26,7 +26,9 @@ namespace anchordb {
 
 // Distinguishes a live key-value entry from a tombstone (deletion marker).
 // Encoded as the low byte of the 8-byte trailer in an internal key.
-enum ValueType { TypeValue = 0x1, TypeDeletion = 0x0 };
+enum ValueType : uint8_t { TypeValue = 0x1, TypeDeletion = 0x0 };
+
+enum ValueFlag : uint8_t { TypeInline = 0x1, TypeBlob = 0x0 };
 
 // A monotonically increasing global sequence number assigned to every write.
 using SeqNum = uint64_t;
@@ -60,17 +62,26 @@ uint64_t pack_seq_and_type(uint64_t seq, ValueType t) {
 } // namespace
 
 // Returns the on-disk size of an internal key: user_key.size() + 8.
-size_t internal_key_encoding_len(const ParsedInternalKey &key);
+inline size_t internal_key_encoding_len(const ParsedInternalKey &key) {
+    return key.user_key.size() + 8;
+}
 
 // Appends the encoded internal key (user_key + 8-byte trailer) to *result.
-void append_internal_key(std::string *result, const ParsedInternalKey &key);
+inline void append_internal_key(std::string *result,
+                                const ParsedInternalKey &key) {
+    result->append(key.user_key.data(), key.user_key.size());
+    put_fixed_64(result, pack_seq_and_type(key.sequence, key.type));
+}
 
 // Decodes an internal key from a Slice.  Returns false if the slice is too
 // short or the ValueType byte is invalid.
 bool parse_internal_key(const Slice &internal_key, ParsedInternalKey *result);
 
 // Strips the trailing 8 bytes (seq+type) and returns only the user_key portion.
-Slice extract_user_key(const Slice &internal_key);
+inline Slice extract_user_key(const Slice &internal_key) {
+    assert(internal_key.size() >= 8);
+    return Slice(internal_key.data(), internal_key.size() - 8);
+}
 
 // An owned, encoded internal key.  Wraps a std::string that holds the full
 // internal key encoding (user_key + 8-byte trailer).  Use this when the key
@@ -208,36 +219,26 @@ class InternalKeyComparator {
     const UserComparator *user_comparator_;
 };
 
-struct alignas(8) ParsedBlobAddress {
+struct BlobHandle {
     uint64_t offset;
     uint32_t file_id;
     uint32_t size;
 
-    ParsedBlobAddress() {}
-    ParsedBlobAddress(uint64_t offset, uint32_t file_id, uint32_t size)
+    BlobHandle() {}
+    BlobHandle(uint64_t offset, uint32_t file_id, uint32_t size)
         : offset(offset), file_id(file_id), size(size) {}
 };
 
-void append_blob_address(char *result, const ParsedBlobAddress &addr);
+inline void encode_blob_handle(BlobHandle *handle, std::string *result) {
+    put_varint_64(result, handle->offset);
+    put_varint_32(result, handle->file_id);
+    put_varint_32(result, handle->size);
+}
 
-class BlobAddress {
-  public:
-    BlobAddress() {}
-    BlobAddress(uint64_t offset, uint32_t file_id, uint32_t size) {
-        append_blob_address(addr_, ParsedBlobAddress(offset, file_id, size));
-    }
-
-    Slice encode() const { return Slice(addr_, 16); }
-
-    void set_from(const ParsedBlobAddress &addr) {
-        memset(addr_, 0, 16);
-        append_blob_address(addr_, addr);
-    }
-
-    void clear() { memset(addr_, 0, 16); }
-
-  private:
-    char addr_[16];
-};
+inline bool parse_blob_handle(Slice *blob_handle, BlobHandle *result) {
+    return get_varint_64(blob_handle, &result->offset) &&
+           get_varint_32(blob_handle, &result->file_id) &&
+           get_varint_32(blob_handle, &result->size);
+}
 
 } // namespace anchordb
