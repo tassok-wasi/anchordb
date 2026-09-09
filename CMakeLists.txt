@@ -35,32 +35,33 @@ target_sources(anchordb
         src/memtable/skiplist.h
         src/memtable/table.h
         src/memtable/table.cc
-        src/memtable/key.h
-        src/memtable/key.cc
-        src/util/log_writer.h
-        src/util/log_writer.cc
+        src/memtable/table_format.h
+        src/memtable/table_format.cc
         src/util/coding.h
         src/util/coding.cc
         src/util/crc32.h
         src/util/crc32.cc
-        src/io/env.h
+        src/env/env.h
+        src/util/aligned_buffer.cc
+        src/util/comparator.cc
+        src/util/status.cc
 )
 
 if (WIN32)
   target_sources(anchordb
         PRIVATE
-            src/io/env_win.h
-            src/io/env_win.cc
-            src/io/io_win.h
-            src/io/io_win.cc
+            src/env/env_win.h
+            src/env/env_win.cc
+            src/env/io_win.h
+            src/env/io_win.cc
     )
 elseif (UNIX AND NOT APPLE)
   target_sources(anchordb
         PRIVATE
-            src/io/env_posix.h
-            src/io/env_posix.cc
-            src/io/io_posix.h
-            src/io/io_posix.cc
+            src/env/env_posix.h
+            src/env/env_posix.cc
+            src/env/io_posix.h
+            src/env/io_posix.cc
     )
 
   # Locate and link liburing for the io_uring engine layer
