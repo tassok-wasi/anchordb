@@ -20,18 +20,6 @@
 #include "port_posix.h"
 #endif
 
-#ifndef FALLTHROUGH_INTENDED
-#if defined(__clang__)
-#define FALLTHROUGH_INTENDED [[clang::fallthrough]]
-#elif defined(__GNUC__) && __GNUC__ >= 7
-#define FALLTHROUGH_INTENDED [[gnu::fallthrough]]
-#else
-#define FALLTHROUGH_INTENDED                                                   \
-    do {                                                                       \
-    } while (0)
-#endif
-#endif
-
 // Include Intrinsics based on architecture
 #if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) ||             \
     defined(_M_IX86)
