@@ -23,6 +23,8 @@ target_sources(anchordb
             include/anchordb/comparator.h
             include/anchordb/iterator.h
             include/anchordb/status.h
+            include/anchordb/filter.h
+            inclue/anchordb/env.h
 )
 
 target_sources(anchordb
@@ -64,6 +66,7 @@ if (WIN32)
             src/env/env_win.cc
             src/env/io_win.h
             src/env/io_win.cc
+            src/port/port_win.h
     )
 elseif (UNIX AND NOT APPLE)
   target_sources(anchordb
@@ -72,6 +75,7 @@ elseif (UNIX AND NOT APPLE)
             src/env/env_posix.cc
             src/env/io_posix.h
             src/env/io_posix.cc
+            src/port/port_posix.h
     )
 
   # Locate and link liburing for the io_uring engine layer
