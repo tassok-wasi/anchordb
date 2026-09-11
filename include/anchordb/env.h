@@ -15,7 +15,6 @@
 #pragma once
 
 #include "anchordb/export.h"
-#include "anchordb/slice.h"
 #include "anchordb/status.h"
 #include <cstddef>
 #include <cstdint>
@@ -28,6 +27,7 @@ class Logger;
 class AlignedBuffer;
 class RandomAccessFile;
 class SequentialReadFile;
+class Slice;
 class WritableFile;
 
 class ANCHORDB_EXPORT Env {

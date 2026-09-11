@@ -57,10 +57,6 @@ class ANCHORDB_EXPORT Slice {
     // Returns true if the slice has zero length.
     bool empty() const { return size_ == 0; }
 
-    // STL-style iterators for use with range-based for loops and algorithms.
-    const char *begin() const { return data_; }
-    const char *end() const { return data_ + size_; }
-
     // Returns the byte at index n.  Asserts that n < size().
     char operator[](size_t n) const {
         assert(n < size());

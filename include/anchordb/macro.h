@@ -14,6 +14,12 @@
 
 #pragma once
 
+// this configuration will be removed and system will use a single-writer
+// multi-reader skiplist by default and there will be no need to define any of
+// the above macros.
+// `swmr_skiplist.h` is renamed to `skiplist.h` -> this file is being used in
+// the memtable
+
 // Count how many variants are actively defined as non-zero
 #if defined(MWMR_MEMTABLE_SKIPLIST) && (MWMR_MEMTABLE_SKIPLIST + 0)
 #define _ANCHORDB_MWMR 1

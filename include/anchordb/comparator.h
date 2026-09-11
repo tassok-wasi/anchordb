@@ -14,10 +14,12 @@
 
 #pragma once
 
-#include <anchordb/export.h>
-#include <anchordb/slice.h>
+#include "anchordb/export.h"
 
 namespace anchordb {
+
+class Slice;
+
 // Abstract interface for key ordering.  Implementations define a total order
 // over Slices, which is used by the memtable, SSTables, and the internal key
 // comparator to sort and search keys.
