@@ -45,6 +45,16 @@ target_sources(anchordb
         src/util/aligned_buffer.cc
         src/util/comparator.cc
         src/util/status.cc
+        src/util/random.h
+        src/util/hash.h
+        src/util/hash.cc
+        src/util/filter/bloom_filter.h
+        src/util/filter/bloom_filter.cc
+        src/util/filter/cuckoo_filter.h
+        src/util/filter/cuckoo_filter.cc
+        src/util/filter/ribbon_filter.h
+        src/util/filter/ribbon_filter.cc
+        src/util/filter/filter_dispatch.h
 )
 
 if (WIN32)
