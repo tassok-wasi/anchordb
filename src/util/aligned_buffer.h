@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include "port/port.h"
+#include "port/port_posix.h"
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
@@ -21,9 +23,6 @@
 #include <cstdlib>
 #include <cstring>
 
-#if defined(_WIN32)
-#include <malloc.h>
-#endif
 namespace anchordb {
 
 inline size_t roundup(size_t x, size_t y) { return ((x + y - 1) / y) * y; }
@@ -84,18 +83,14 @@ class AlignedBuffer {
         }
         size_t new_capacity = roundup(req_capacity, alignment_);
 
-#if defined(_WIN32)
-        char *new_bufstart =
-            static_cast<char *>(_aligned_malloc(new_capacity, alignment_));
-#else
         void *raw_ptr = nullptr;
-        if (::posix_memalign(&raw_ptr, alignment_, new_capacity) != 0) {
+        if (alloc_aligned(&raw_ptr, new_capacity, alignment_) != 0) {
             bufstart_ = nullptr;
             capacity_ = 0;
             return;
         }
         char *new_bufstart = static_cast<char *>(raw_ptr);
-#endif
+
         if (copy_data && bufstart_ != nullptr) {
             assert(bufstart_ + copy_offset + copy_len <= bufstart_ + cursize_);
             memcpy(new_bufstart, bufstart_ + copy_offset, copy_len);
@@ -109,11 +104,7 @@ class AlignedBuffer {
         bufstart_ = new_bufstart;
 
         if (old_buf) {
-#if defined(_WIN32)
-            _aligned_free(old_buf);
-#else
-            ::free(old_buf);
-#endif
+            free_aligned(static_cast<void *>(old_buf));
         }
     }
 
@@ -161,26 +152,18 @@ class AlignedBuffer {
         assert(alignment_ > 0);
         assert((alignment_ & (alignment_ - 1)) == 0);
 
-#if defined(_WIN32)
-        bufstart_ = static_cast<char *>(_aligned_malloc(capacity_, alignment_));
-#else
         void *raw_ptr = nullptr;
-        if (::posix_memalign(&raw_ptr, alignment_, capacity_) != 0) {
+        if (alloc_aligned(&raw_ptr, alignment_, capacity_) != 0) {
             bufstart_ = nullptr;
             capacity_ = 0;
             return;
         }
         bufstart_ = static_cast<char *>(raw_ptr);
-#endif
     }
 
     void free() {
         if (bufstart_) {
-#if defined(_WIN32)
-            _aligned_free(bufstart_);
-#else
-            ::free(bufstart_);
-#endif
+            free_aligned(bufstart_);
             bufstart_ = nullptr;
         }
         capacity_ = 0;

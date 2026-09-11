@@ -1,0 +1,55 @@
+// Copyright 2026 Tassok Imam Wasi
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+
+//     http://www.apache.org/licenses/LICENSE-2.0
+
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "port/port.h"
+#include "util/coding.h"
+#include <cstddef>
+#include <cstdint>
+
+namespace anchordb {
+
+uint32_t hash(const char *data, size_t n, uint32_t seed) {
+    // Similar to murmur hash
+    const uint32_t m = 0xc6a4a793;
+    const uint32_t r = 24;
+    const char *limit = data + n;
+    uint32_t h = seed ^ (n * m);
+
+    // Pick up four bytes at a time
+    while (limit - data >= 4) {
+        uint32_t w = decode_fixed_32(data);
+        data += 4;
+        h += w;
+        h *= m;
+        h ^= (h >> 16);
+    }
+
+    // Pick up remaining bytes
+    switch (limit - data) {
+    case 3:
+        h += static_cast<uint8_t>(data[2]) << 16;
+        FALLTHROUGH_INTENDED;
+    case 2:
+        h += static_cast<uint8_t>(data[1]) << 8;
+        FALLTHROUGH_INTENDED;
+    case 1:
+        h += static_cast<uint8_t>(data[0]);
+        h *= m;
+        h ^= (h >> r);
+        break;
+    }
+    return h;
+}
+
+} // namespace anchordb

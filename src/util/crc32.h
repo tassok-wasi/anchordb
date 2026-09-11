@@ -17,24 +17,7 @@
 #include <cstddef>
 #include <cstdint>
 
-// Include Intrinsics based on architecture
-#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) ||             \
-    defined(_M_IX86)
-#define HAS_X86 1
-#if defined(_MSC_VER)
-#include <intrin.h>
-#else
-#include <x86intrin.h>
-#endif // _MSC_VER
-#elif defined(__aarch64__) || defined(_M_ARM64)
-#define HAS_ARM 1
-#if defined(__ARM_FEATURE_CRC32)
-#include <arm_acle.h>
-#endif // __ARM_FEATURE_CRC32
-#endif // _MSC_VER
-
 namespace anchordb {
-namespace crc32 {
 
 // Extends a running CRC32 checksum with additional data.
 // `crc` is the initial CRC value (typically 0 or a previously computed CRC).
@@ -61,5 +44,4 @@ inline uint32_t unmask(uint32_t masked_crc) {
     return ((rot >> 17) | (rot << 15));
 }
 
-} // namespace crc32
 } // namespace anchordb
