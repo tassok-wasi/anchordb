@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "port/port.h"
 #include "util/coding.h"
 #include <cstddef>
 #include <cstdint>
@@ -20,14 +19,25 @@
 namespace anchordb {
 
 uint32_t hash(const char *data, size_t n, uint32_t seed) {
-    // Similar to murmur hash
     const uint32_t m = 0xc6a4a793;
     const uint32_t r = 24;
     const char *limit = data + n;
     uint32_t h = seed ^ (n * m);
 
-    // Pick up four bytes at a time
-    while (limit - data >= 4) {
+    // Unroll loop to process 8 bytes at a time for better ILP
+    while (limit - data >= 8) {
+        uint32_t w1 = decode_fixed_32(data);
+        uint32_t w2 = decode_fixed_32(data + 4);
+        data += 8;
+        h += w1;
+        h *= m;
+        h ^= (h >> 16);
+        h += w2;
+        h *= m;
+        h ^= (h >> 16);
+    }
+
+    if (limit - data >= 4) {
         uint32_t w = decode_fixed_32(data);
         data += 4;
         h += w;
@@ -38,13 +48,13 @@ uint32_t hash(const char *data, size_t n, uint32_t seed) {
     // Pick up remaining bytes
     switch (limit - data) {
     case 3:
-        h += static_cast<uint8_t>(data[2]) << 16;
-        FALLTHROUGH_INTENDED;
+        h += static_cast<uint32_t>(static_cast<uint8_t>(data[2])) << 16;
+        [[fallthrough]];
     case 2:
-        h += static_cast<uint8_t>(data[1]) << 8;
-        FALLTHROUGH_INTENDED;
+        h += static_cast<uint32_t>(static_cast<uint8_t>(data[1])) << 8;
+        [[fallthrough]];
     case 1:
-        h += static_cast<uint8_t>(data[0]);
+        h += static_cast<uint32_t>(static_cast<uint8_t>(data[0]));
         h *= m;
         h ^= (h >> r);
         break;
