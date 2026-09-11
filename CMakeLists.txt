@@ -80,6 +80,8 @@ target_include_directories(anchordb
 )
 
 # MemTable Skiplist Variant Selector
+# this checks will be removed in future when codebase will fully ensure
+#  that there is no nedd for multiple skiplist variants
 set(SKIPLIST_VARIANT "MWMR" CACHE STRING "Select MemTable SkipList variant (MWMR, SWMR, SWSR)")
 set_property(CACHE SKIPLIST_VARIANT PROPERTY STRINGS "MWMR" "SWMR" "SWSR")
 
@@ -111,3 +113,8 @@ if(ipo_supported)
   # Enables Link-Time Optimization for maximum cross-translation-unit inlining
   set_target_properties(anchordb PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
 endif()
+
+
+# they aren't implemented yet
+# include(CheckLibraryExists)
+# check_library_exists(snappy snappy_compress "" HAVE_SNAPPY)
