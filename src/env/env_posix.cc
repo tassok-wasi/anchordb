@@ -13,8 +13,10 @@
 // limitations under the License.
 
 #include "anchordb/env.h"
+#include "anchordb/status.h"
 #include "env/env_posix.h"
 #include "env/io_posix.h"
+#include "util/posix_logger.h"
 
 #include <chrono>
 #include <cstddef>
@@ -84,9 +86,9 @@ struct io_uring *PosixEnv::get_thread_local_ring() {
     return tls_ring;
 }
 
-Status PosixEnv::new_sequential_read_file(const std::string &filename,
-                                          SequentialReadFile **result,
-                                          size_t buffer_size) {
+Status PosixEnv::new_sequential_file_reader(const std::string &filename,
+                                            SequentialFileReader **result,
+                                            size_t buffer_size) {
     int flags = O_RDONLY | O_CLOEXEC;
     if (direct_io_) {
         flags |= O_DIRECT;
@@ -102,15 +104,17 @@ Status PosixEnv::new_sequential_read_file(const std::string &filename,
         ring = &default_ring_;
     }
     size_t buf_size =
-        (buffer_size != 0) ? buffer_size : k_sequential_read_file_buffer_size;
-    AlignedBuffer buf(buf_size, k_direct_io_alignment);
-    *result = new PosixSequentialReadFile(filename, fd, ring, &buf, direct_io_);
+        (buffer_size != 0) ? buffer_size : k_seq_file_reader_buf_size;
+    AlignedBuffer buf(buf_size, k_o_direct_alignment);
+    *result =
+        new PosixSequentialFileReader(filename, fd, ring, &buf, direct_io_);
 
     return Status::ok();
 }
 
-Status PosixEnv::new_random_access_file(const std::string &filename,
-                                        RandomAccessFile **result) {
+Status
+PosixEnv::new_random_access_file_reader(const std::string &filename,
+                                        RandomAccessFileReader **result) {
     int fd = -1;
 
     if (fd_limiter_.acquire()) {
@@ -134,13 +138,14 @@ Status PosixEnv::new_random_access_file(const std::string &filename,
         ring = &default_ring_;
     }
 
-    *result =
-        new PosixRandomAccessFile(filename, fd, &fd_limiter_, ring, direct_io_);
+    *result = new PosixRandomAccessFileReader(filename, fd, &fd_limiter_, ring,
+                                              direct_io_);
     return Status::ok();
 }
 
-Status PosixEnv::new_writable_file(const std::string &filename,
-                                   WritableFile **result, size_t buffer_size) {
+Status PosixEnv::new_writable_file_writer(const std::string &filename,
+                                          WritableFileWriter **result,
+                                          size_t buffer_size) {
     int flags = O_CREAT | O_WRONLY | O_TRUNC | O_CLOEXEC;
     if (direct_io_) {
         flags |= O_DIRECT;
@@ -158,16 +163,16 @@ Status PosixEnv::new_writable_file(const std::string &filename,
     }
 
     size_t buf_size =
-        (buffer_size != 0) ? buffer_size : k_sequential_read_file_buffer_size;
-    AlignedBuffer buf(buf_size, k_direct_io_alignment);
-    *result = new PosixWritableFile(filename, fd, ring, &buf, direct_io_);
+        (buffer_size != 0) ? buffer_size : k_seq_file_reader_buf_size;
+    AlignedBuffer buf(buf_size, k_o_direct_alignment);
+    *result = new PosixWritableFileWriter(filename, fd, ring, &buf, direct_io_);
 
     return Status::ok();
 }
 
-Status PosixEnv::new_appendable_file(const std::string &filename,
-                                     WritableFile **result,
-                                     size_t buffer_size) {
+Status PosixEnv::new_appendable_file_writer(const std::string &filename,
+                                            WritableFileWriter **result,
+                                            size_t buffer_size) {
     int flags = O_CREAT | O_WRONLY | O_APPEND | O_CLOEXEC;
     if (direct_io_) {
         flags |= O_DIRECT;
@@ -185,9 +190,9 @@ Status PosixEnv::new_appendable_file(const std::string &filename,
     }
 
     size_t buf_size =
-        (buffer_size != 0) ? buffer_size : k_sequential_read_file_buffer_size;
-    AlignedBuffer buf(buf_size, k_direct_io_alignment);
-    PosixWritableFile file(filename, fd, ring, &buf, direct_io_);
+        (buffer_size != 0) ? buffer_size : k_seq_file_reader_buf_size;
+    AlignedBuffer buf(buf_size, k_o_direct_alignment);
+    PosixWritableFileWriter file(filename, fd, ring, &buf, direct_io_);
 
     uint64_t file_size = 0;
     Status s = get_file_size(filename, &file_size);
@@ -350,6 +355,25 @@ Status PosixEnv::get_test_dir(std::string *result) {
     create_dir(*result);
 
     return Status::ok();
+}
+
+Status PosixEnv::new_logger(const std::string &filename, Logger **result) {
+    int fd = ::open(filename.c_str(), O_APPEND | O_WRONLY | O_CREAT | O_CLOEXEC,
+                    0644);
+    if (fd < 0) {
+        *result = nullptr;
+        return posix_error(filename, errno);
+    }
+
+    std::FILE *fp = ::fdopen(fd, "w");
+    if (fp == nullptr) {
+        ::close(fd);
+        *result = nullptr;
+        return posix_error(filename, errno);
+    } else {
+        *result = new PosixLogger(fp);
+        return Status::ok();
+    }
 }
 
 uint64_t PosixEnv::now_micros() {

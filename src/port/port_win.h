@@ -22,3 +22,20 @@ inline int alloc_aligned(void **ptr, size_t size, size_t alignment) {
     return *ptr == nullptr; // Returns 0 on success, 1 on failure
 }
 inline void free_aligned(void *ptr) { _aligned_free(ptr); }
+
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) ||             \
+    defined(_M_IX86)
+#define HAS_X86 1
+#elif defined(__aarch64__) || defined(_M_ARM64)
+#define HAS_ARM 1
+#endif
+
+#if defined(_MSC_VER)
+#include <intrin.h>
+#elif defined(HAS_X86)
+#include <x86intrin.h>
+#endif
+
+#if defined(__ARM_FEATURE_CRC32)
+#include <arm_acle.h>
+#endif

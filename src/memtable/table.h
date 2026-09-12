@@ -17,8 +17,8 @@
 #include "anchordb/slice.h"
 #include "anchordb/status.h"
 #include "arena.h"
+#include "db/db_format.h"
 #include "skiplist.h"
-#include "table_format.h"
 #include "util/coding.h"
 #include <cassert>
 #include <cstddef>

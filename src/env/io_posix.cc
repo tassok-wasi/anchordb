@@ -32,9 +32,9 @@ Status posix_error(const std::string &context, int error_number) {
     }
 }
 
-Status PosixSequentialReadFile::submit_read_(void *dst, size_t len,
-                                             uint64_t offset,
-                                             size_t *bytes_read) {
+Status PosixSequentialFileReader::submit_read_(void *dst, size_t len,
+                                               uint64_t offset,
+                                               size_t *bytes_read) {
     *bytes_read = 0;
     size_t total_read = 0;
 
@@ -84,7 +84,7 @@ Status PosixSequentialReadFile::submit_read_(void *dst, size_t len,
 
         total_read += static_cast<size_t>(res);
 
-        if (direct_io_ && (res % k_direct_io_alignment != 0)) {
+        if (direct_io_ && (res % k_o_direct_alignment != 0)) {
             break;
         }
     }
@@ -93,7 +93,7 @@ Status PosixSequentialReadFile::submit_read_(void *dst, size_t len,
     return Status::ok();
 }
 
-Status PosixSequentialReadFile::read(size_t n, Slice *result, char *scratch) {
+Status PosixSequentialFileReader::read(size_t n, Slice *result, char *scratch) {
     *result = Slice();
     if (n == 0)
         return Status::ok();
@@ -147,14 +147,14 @@ Status PosixSequentialReadFile::read(size_t n, Slice *result, char *scratch) {
         size_t remaining_req = n - total_copied;
         bool is_dst_aligned =
             (reinterpret_cast<uintptr_t>(scratch + total_copied) %
-                 k_direct_io_alignment ==
+                 k_o_direct_alignment ==
              0);
-        bool is_offset_aligned = (offset_ % k_direct_io_alignment == 0);
+        bool is_offset_aligned = (offset_ % k_o_direct_alignment == 0);
 
         if (remaining_req >= buf_.capacity() && is_dst_aligned &&
             is_offset_aligned) {
             size_t aligned_len =
-                remaining_req & ~static_cast<size_t>(k_direct_io_alignment - 1);
+                remaining_req & ~static_cast<size_t>(k_o_direct_alignment - 1);
             size_t bytes_read = 0;
 
             Status s = submit_read_(scratch + total_copied, aligned_len,
@@ -173,7 +173,7 @@ Status PosixSequentialReadFile::read(size_t n, Slice *result, char *scratch) {
         }
 
         uint64_t aligned_offset =
-            offset_ & ~static_cast<uint64_t>(k_direct_io_alignment - 1);
+            offset_ & ~static_cast<uint64_t>(k_o_direct_alignment - 1);
         size_t bytes_read = 0;
 
         Status s = submit_read_(buf_.data(), buf_.capacity(), aligned_offset,
@@ -193,7 +193,7 @@ Status PosixSequentialReadFile::read(size_t n, Slice *result, char *scratch) {
     return Status::ok();
 }
 
-Status PosixSequentialReadFile::skip(uint64_t n) {
+Status PosixSequentialFileReader::skip(uint64_t n) {
     offset_ += n;
 
     if (offset_ < buf_file_offset_ ||
@@ -211,9 +211,9 @@ Status PosixSequentialReadFile::skip(uint64_t n) {
     return Status::ok();
 }
 
-Status PosixRandomAccessFile::submit_read_(int fd, void *buf, size_t n,
-                                           uint64_t offset,
-                                           size_t *bytes_read) {
+Status PosixRandomAccessFileReader::submit_read_(int fd, void *buf, size_t n,
+                                                 uint64_t offset,
+                                                 size_t *bytes_read) {
     *bytes_read = 0;
     size_t total_read = 0;
 
@@ -264,7 +264,7 @@ Status PosixRandomAccessFile::submit_read_(int fd, void *buf, size_t n,
 
         total_read += static_cast<size_t>(res);
 
-        if (direct_io_ && (res % k_direct_io_alignment != 0)) {
+        if (direct_io_ && (res % k_o_direct_alignment != 0)) {
             break;
         }
     }
@@ -273,8 +273,8 @@ Status PosixRandomAccessFile::submit_read_(int fd, void *buf, size_t n,
     return Status::ok();
 }
 
-Status PosixRandomAccessFile::read(uint64_t offset, size_t n, Slice *result,
-                                   char *scratch) {
+Status PosixRandomAccessFileReader::read(uint64_t offset, size_t n,
+                                         Slice *result, char *scratch) {
     *result = Slice();
     int target_fd = -1;
 
@@ -307,21 +307,21 @@ Status PosixRandomAccessFile::read(uint64_t offset, size_t n, Slice *result,
 
     if (direct_io_) {
         bool is_scratch_aligned =
-            (reinterpret_cast<uintptr_t>(scratch) % k_direct_io_alignment == 0);
-        bool is_offset_aligned = (offset % k_direct_io_alignment == 0);
-        bool is_len_aligned = (n % k_direct_io_alignment == 0);
+            (reinterpret_cast<uintptr_t>(scratch) % k_o_direct_alignment == 0);
+        bool is_offset_aligned = (offset % k_o_direct_alignment == 0);
+        bool is_len_aligned = (n % k_o_direct_alignment == 0);
 
         if (is_scratch_aligned && is_offset_aligned && is_len_aligned) {
             target_buf = scratch;
         } else {
             read_offset =
-                offset & ~(static_cast<uint64_t>(k_direct_io_alignment) - 1);
+                offset & ~(static_cast<uint64_t>(k_o_direct_alignment) - 1);
             uint64_t end_offset =
-                ((offset + n) + k_direct_io_alignment - 1) &
-                ~(static_cast<uint64_t>(k_direct_io_alignment) - 1);
+                ((offset + n) + k_o_direct_alignment - 1) &
+                ~(static_cast<uint64_t>(k_o_direct_alignment) - 1);
             read_bytes = static_cast<size_t>(end_offset - read_offset);
 
-            AlignedBuffer buf(read_bytes, k_direct_io_alignment);
+            AlignedBuffer buf(read_bytes, k_o_direct_alignment);
             if (!buf.is_allocated()) {
                 return Status::io_error(
                     "Failed to allocate sector-aligned buffer for O_DIRECT");
@@ -360,8 +360,8 @@ Status PosixRandomAccessFile::read(uint64_t offset, size_t n, Slice *result,
     return Status::ok();
 }
 
-Status PosixWritableFile::submit_write_(const char *src, size_t len,
-                                        uint64_t offset) {
+Status PosixWritableFileWriter::submit_write_(const char *src, size_t len,
+                                              uint64_t offset) {
     size_t total_written = 0;
 
     while (total_written < len) {
@@ -411,7 +411,7 @@ Status PosixWritableFile::submit_write_(const char *src, size_t len,
 
         total_written += static_cast<size_t>(res);
 
-        if (direct_io_ && (res % k_direct_io_alignment != 0) &&
+        if (direct_io_ && (res % k_o_direct_alignment != 0) &&
             (total_written < len)) {
             return posix_error(filename_, EINVAL);
         }
@@ -420,16 +420,16 @@ Status PosixWritableFile::submit_write_(const char *src, size_t len,
     return Status::ok();
 }
 
-Status PosixWritableFile::append(const Slice &data) {
+Status PosixWritableFileWriter::append(const Slice &data) {
     const char *src = data.data();
     size_t left = data.size();
 
     while (left > 0) {
         if (direct_io_ && buf_.current_size() == 0) {
             bool is_src_aligned =
-                (reinterpret_cast<uintptr_t>(src) % 4096 == 0);
-            bool is_offset_aligned = (filesize_ % 4096 == 0);
-            bool is_len_aligned = (left % 4096 == 0);
+                (reinterpret_cast<uintptr_t>(src) % k_o_direct_alignment == 0);
+            bool is_offset_aligned = (filesize_ % k_o_direct_alignment == 0);
+            bool is_len_aligned = (left % k_o_direct_alignment == 0);
 
             if (is_src_aligned && is_offset_aligned && is_len_aligned) {
                 Status s = submit_write_(src, left, filesize_);
@@ -455,7 +455,7 @@ Status PosixWritableFile::append(const Slice &data) {
     return Status::ok();
 }
 
-Status PosixWritableFile::close() {
+Status PosixWritableFileWriter::close() {
     Status s = flush_buffer();
 
     if (direct_io_ && s.is_ok()) {
@@ -473,7 +473,7 @@ Status PosixWritableFile::close() {
     return s;
 }
 
-Status PosixWritableFile::sync() {
+Status PosixWritableFileWriter::sync() {
     Status s = flush_buffer();
     if (!s.is_ok())
         return s;
@@ -485,7 +485,7 @@ Status PosixWritableFile::sync() {
     return Status::ok();
 }
 
-Status PosixWritableFile::flush_buffer() {
+Status PosixWritableFileWriter::flush_buffer() {
     if (buf_.current_size() == 0)
         return Status::ok();
 
@@ -493,10 +493,12 @@ Status PosixWritableFile::flush_buffer() {
     uint64_t write_offset = filesize_ - buf_.current_size();
 
     if (direct_io_) {
-        size_t remainder = buf_.current_size() % 4096;
+        size_t remainder = buf_.current_size() % k_o_direct_alignment;
         if (remainder != 0) {
-            size_t padded_size = buf_.current_size() + (4096 - remainder);
-            std::memset(buf_.data() + buf_.current_size(), 0, 4096 - remainder);
+            size_t padded_size =
+                buf_.current_size() + (k_o_direct_alignment - remainder);
+            std::memset(buf_.data() + buf_.current_size(), 0,
+                        k_o_direct_alignment - remainder);
             bytes_to_write = padded_size;
         }
     }
@@ -509,7 +511,7 @@ Status PosixWritableFile::flush_buffer() {
     return Status::ok();
 }
 
-Status PosixWritableFile::sync_dir_if_manifest() {
+Status PosixWritableFileWriter::sync_dir_if_manifest() {
     Status status;
     if (!is_manifest_) {
         return status;
@@ -525,7 +527,7 @@ Status PosixWritableFile::sync_dir_if_manifest() {
     return status;
 }
 
-Status PosixWritableFile::sync_fd(int fd, const std::string &fd_path) {
+Status PosixWritableFileWriter::sync_fd(int fd, const std::string &fd_path) {
     bool sync_success = ::fdatasync(fd) == 0;
 
     if (sync_success) {
@@ -534,7 +536,7 @@ Status PosixWritableFile::sync_fd(int fd, const std::string &fd_path) {
     return posix_error(fd_path, errno);
 }
 
-std::string PosixWritableFile::dirname(const std::string &filename) {
+std::string PosixWritableFileWriter::dirname(const std::string &filename) {
     std::string::size_type separator_pos = filename.rfind('/');
     if (separator_pos == std::string::npos) {
         return std::string(".");
@@ -544,7 +546,7 @@ std::string PosixWritableFile::dirname(const std::string &filename) {
     return filename.substr(0, separator_pos);
 }
 
-Slice PosixWritableFile::basename(const std::string &filename) {
+Slice PosixWritableFileWriter::basename(const std::string &filename) {
     std::string::size_type separator_pos = filename.rfind('/');
     if (separator_pos == std::string::npos) {
         return Slice(filename);

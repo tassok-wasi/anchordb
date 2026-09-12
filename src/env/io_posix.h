@@ -30,10 +30,10 @@
 
 namespace anchordb {
 
-constexpr const size_t k_writable_file_buffer_size = 65536;           // 64KB
-constexpr const size_t k_sequential_read_file_buffer_size = 4194304;  // 4MB
-constexpr const size_t k_sequential_blob_file_buffer_size = 67108864; // 64MB
-constexpr const size_t k_direct_io_alignment = 4096;
+constexpr const size_t k_writable_file_buf_size = 65536;           // 64KB
+constexpr const size_t k_seq_file_reader_buf_size = 4194304;       // 4MB
+constexpr const size_t k_seq_blob_file_reader_buf_size = 67108864; // 64MB
+constexpr const size_t k_o_direct_alignment = 4096;
 
 Status posix_error(const std::string &context, int error_number);
 
@@ -68,24 +68,24 @@ class Limiter {
 };
 
 // Sequential read via io_uring. Not thread-safe.
-class PosixSequentialReadFile final : public SequentialReadFile {
+class PosixSequentialFileReader final : public SequentialFileReader {
   public:
-    PosixSequentialReadFile(std::string filename, int fd, struct io_uring *ring,
-                            AlignedBuffer *buf = nullptr,
-                            size_t buffer_size = 0, bool direct_io = true)
+    PosixSequentialFileReader(std::string filename, int fd,
+                              struct io_uring *ring,
+                              AlignedBuffer *buf = nullptr,
+                              size_t buffer_size = 0, bool direct_io = true)
         : fd_(fd), filename_(std::move(filename)), ring_(ring), offset_(0),
           direct_io_(direct_io), buf_file_offset_(0), buf_bytes_valid_(0) {
         if (buf != nullptr) {
             buf_ = std::move(*buf);
         } else if (direct_io_) {
-            size_t buf_size = (buffer_size != 0)
-                                  ? buffer_size
-                                  : k_sequential_read_file_buffer_size;
-            buf_ = AlignedBuffer(buf_size, k_direct_io_alignment);
+            size_t buf_size =
+                (buffer_size != 0) ? buffer_size : k_seq_file_reader_buf_size;
+            buf_ = AlignedBuffer(buf_size, k_o_direct_alignment);
         }
     }
 
-    ~PosixSequentialReadFile() override {
+    ~PosixSequentialFileReader() override {
         if (fd_ >= 0) {
             ::close(fd_);
         }
@@ -110,14 +110,14 @@ class PosixSequentialReadFile final : public SequentialReadFile {
 };
 
 // Random read via io_uring. Supports permanent or borrowed fd.
-class PosixRandomAccessFile final : public RandomAccessFile {
+class PosixRandomAccessFileReader final : public RandomAccessFileReader {
   public:
-    PosixRandomAccessFile(std::string filename, int fd, Limiter *limiter,
-                          struct io_uring *ring, bool direct_io = true)
+    PosixRandomAccessFileReader(std::string filename, int fd, Limiter *limiter,
+                                struct io_uring *ring, bool direct_io = true)
         : filename_(std::move(filename)), has_permanent_fd_(fd >= 0), fd_(fd),
           limiter_(limiter), ring_(ring), direct_io_(direct_io) {}
 
-    ~PosixRandomAccessFile() override {
+    ~PosixRandomAccessFileReader() override {
         if (has_permanent_fd_) {
             ::close(fd_);
             if (limiter_ != nullptr) {
@@ -143,22 +143,22 @@ class PosixRandomAccessFile final : public RandomAccessFile {
 
 // Buffered sequential write via io_uring. For MANIFEST files, sync() also
 // fsyncs the parent directory.
-class PosixWritableFile final : public WritableFile {
+class PosixWritableFileWriter final : public WritableFileWriter {
   public:
-    PosixWritableFile(std::string filename, int fd, struct io_uring *ring,
-                      AlignedBuffer *buf = nullptr, bool direct_io = true)
+    PosixWritableFileWriter(std::string filename, int fd, struct io_uring *ring,
+                            AlignedBuffer *buf = nullptr, bool direct_io = true)
         : filename_(std::move(filename)), fd_(fd), ring_(ring), filesize_(0),
           direct_io_(direct_io), is_manifest_(is_manifest(filename_)),
           dirname_(dirname(filename_)) {
         if (buf != nullptr) {
             buf_ = std::move(*buf);
         } else {
-            buf_ = AlignedBuffer(k_writable_file_buffer_size,
-                                 k_direct_io_alignment);
+            buf_ =
+                AlignedBuffer(k_writable_file_buf_size, k_o_direct_alignment);
         }
     }
 
-    ~PosixWritableFile() override {
+    ~PosixWritableFileWriter() override {
         if (fd_ >= 0) {
             close();
         }

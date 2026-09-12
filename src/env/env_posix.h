@@ -57,16 +57,18 @@ class PosixEnv : public Env {
 
     // File creation and I/O
 
-    Status new_sequential_read_file(const std::string &fname,
-                                    SequentialReadFile **result,
+    Status new_sequential_file_reader(const std::string &fname,
+                                      SequentialFileReader **result,
+                                      size_t buf_size = 0) override;
+    Status
+    new_random_access_file_reader(const std::string &filename,
+                                  RandomAccessFileReader **result) override;
+    Status new_writable_file_writer(const std::string &filename,
+                                    WritableFileWriter **result,
                                     size_t buf_size = 0) override;
-    Status new_random_access_file(const std::string &filename,
-                                  RandomAccessFile **result) override;
-    Status new_writable_file(const std::string &filename, WritableFile **result,
-                             size_t buf_size = 0) override;
-    Status new_appendable_file(const std::string &filename,
-                               WritableFile **result,
-                               size_t buf_size = 0) override;
+    Status new_appendable_file_writer(const std::string &filename,
+                                      WritableFileWriter **result,
+                                      size_t buf_size = 0) override;
 
     bool file_exists(const std::string &filename) override;
     Status get_children(const std::string &dir_path,
@@ -84,6 +86,8 @@ class PosixEnv : public Env {
     void schedule(void (*function)(void *arg), void *arg) override;
 
     Status get_test_dir(std::string *result) override;
+
+    Status new_logger(const std::string &filename, Logger **result) override;
 
     // Returns the current time in microseconds since the Unix epoch.
     uint64_t now_micros() override;

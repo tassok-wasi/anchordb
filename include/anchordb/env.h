@@ -16,6 +16,7 @@
 
 #include "anchordb/export.h"
 #include "anchordb/status.h"
+#include <cstdarg>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -25,10 +26,11 @@ namespace anchordb {
 class FileLock;
 class Logger;
 class AlignedBuffer;
-class RandomAccessFile;
-class SequentialReadFile;
+class RandomAccessFileReader;
+class SequentialFileReader;
 class Slice;
-class WritableFile;
+class WritableFileWriter;
+class Logger;
 
 class ANCHORDB_EXPORT Env {
   public:
@@ -41,17 +43,18 @@ class ANCHORDB_EXPORT Env {
 
     static Env *default_env();
 
-    virtual Status new_sequential_read_file(const std::string &fname,
-                                            SequentialReadFile **result,
+    virtual Status new_sequential_file_reader(const std::string &fname,
+                                              SequentialFileReader **result,
+                                              size_t buffer_size = 0) = 0;
+    virtual Status
+    new_random_access_file_reader(const std::string &fname,
+                                  RandomAccessFileReader **result) = 0;
+    virtual Status new_writable_file_writer(const std::string &fname,
+                                            WritableFileWriter **result,
                                             size_t buffer_size = 0) = 0;
-    virtual Status new_random_access_file(const std::string &fname,
-                                          RandomAccessFile **result) = 0;
-    virtual Status new_writable_file(const std::string &fname,
-                                     WritableFile **result,
-                                     size_t buffer_size = 0) = 0;
-    virtual Status new_appendable_file(const std::string &fname,
-                                       WritableFile **result,
-                                       size_t buffer_size = 0) = 0;
+    virtual Status new_appendable_file_writer(const std::string &fname,
+                                              WritableFileWriter **result,
+                                              size_t buffer_size = 0) = 0;
 
     virtual bool file_exists(const std::string &fname) = 0;
     virtual Status get_children(const std::string &dir,
@@ -69,48 +72,63 @@ class ANCHORDB_EXPORT Env {
     virtual void schedule(void (*function)(void *arg), void *arg) = 0;
     virtual Status get_test_dir(std::string *path) = 0;
 
+    virtual Status new_logger(const std::string &fname, Logger **result) = 0;
+
     virtual uint64_t now_micros() = 0;
     virtual void sleep_for_micros(int micros) = 0;
 };
 
-class ANCHORDB_EXPORT SequentialReadFile {
+class ANCHORDB_EXPORT SequentialFileReader {
   public:
-    SequentialReadFile() = default;
-    virtual ~SequentialReadFile();
+    SequentialFileReader() = default;
+    virtual ~SequentialFileReader();
 
-    SequentialReadFile(const SequentialReadFile &) = delete;
-    SequentialReadFile &operator=(const SequentialReadFile &) = delete;
+    SequentialFileReader(const SequentialFileReader &) = delete;
+    SequentialFileReader &operator=(const SequentialFileReader &) = delete;
 
     virtual Status read(size_t n, Slice *result, char *scratch) = 0;
     virtual Status skip(uint64_t n) = 0;
 };
 
-class ANCHORDB_EXPORT RandomAccessFile {
+class ANCHORDB_EXPORT RandomAccessFileReader {
   public:
-    RandomAccessFile() = default;
+    RandomAccessFileReader() = default;
 
-    RandomAccessFile(const RandomAccessFile &) = delete;
-    RandomAccessFile &operator=(const RandomAccessFile &) = delete;
+    RandomAccessFileReader(const RandomAccessFileReader &) = delete;
+    RandomAccessFileReader &operator=(const RandomAccessFileReader &) = delete;
 
-    virtual ~RandomAccessFile();
+    virtual ~RandomAccessFileReader();
 
     virtual Status read(uint64_t offset, size_t n, Slice *result,
                         char *scratch) = 0;
 };
 
-class ANCHORDB_EXPORT WritableFile {
+class ANCHORDB_EXPORT WritableFileWriter {
   public:
-    WritableFile() = default;
+    WritableFileWriter() = default;
 
-    WritableFile(const WritableFile &) = delete;
-    WritableFile &operator=(const WritableFile &) = delete;
+    WritableFileWriter(const WritableFileWriter &) = delete;
+    WritableFileWriter &operator=(const WritableFileWriter &) = delete;
 
-    virtual ~WritableFile();
+    virtual ~WritableFileWriter();
 
     virtual Status append(const Slice &data) = 0;
     virtual Status close() = 0;
     virtual Status flush() = 0;
     virtual Status sync() = 0;
+};
+
+class ANCHORDB_EXPORT Logger {
+  public:
+    Logger() = default;
+
+    Logger(const Logger &) = delete;
+    Logger &operator=(const Logger &) = delete;
+
+    virtual ~Logger();
+
+    // Write an entry to the log file with the specified format.
+    virtual void Logv(const char *format, std::va_list ap) = 0;
 };
 
 class ANCHORDB_EXPORT FileLock {
@@ -133,22 +151,24 @@ class ANCHORDB_EXPORT EnvWrapper : public Env {
     Env *target() const { return target_; }
 
     // The following text is boilerplate that forwards all methods to target().
-    Status new_sequential_read_file(const std::string &f,
-                                    SequentialReadFile **r,
+    Status new_sequential_file_reader(const std::string &f,
+                                      SequentialFileReader **r,
+                                      size_t buffer_size = 0) override {
+        return target_->new_sequential_file_reader(f, r, buffer_size);
+    }
+    Status new_random_access_file_reader(const std::string &f,
+                                         RandomAccessFileReader **r) override {
+        return target_->new_random_access_file_reader(f, r);
+    }
+    Status new_writable_file_writer(const std::string &f,
+                                    WritableFileWriter **r,
                                     size_t buffer_size = 0) override {
-        return target_->new_sequential_read_file(f, r, buffer_size);
+        return target_->new_writable_file_writer(f, r, buffer_size);
     }
-    Status new_random_access_file(const std::string &f,
-                                  RandomAccessFile **r) override {
-        return target_->new_random_access_file(f, r);
-    }
-    Status new_writable_file(const std::string &f, WritableFile **r,
-                             size_t buffer_size = 0) override {
-        return target_->new_writable_file(f, r, buffer_size);
-    }
-    Status new_appendable_file(const std::string &f, WritableFile **r,
-                               size_t buffer_size = 0) override {
-        return target_->new_appendable_file(f, r, buffer_size);
+    Status new_appendable_file_writer(const std::string &f,
+                                      WritableFileWriter **r,
+                                      size_t buffer_size = 0) override {
+        return target_->new_appendable_file_writer(f, r, buffer_size);
     }
     bool file_exists(const std::string &f) override {
         return target_->file_exists(f);
@@ -181,6 +201,9 @@ class ANCHORDB_EXPORT EnvWrapper : public Env {
     }
     Status get_test_dir(std::string *path) override {
         return target_->get_test_dir(path);
+    }
+    Status new_logger(const std::string &fname, Logger **result) override {
+        return target_->new_logger(fname, result);
     }
     uint64_t now_micros() override { return target_->now_micros(); }
     void sleep_for_micros(int micros) override {

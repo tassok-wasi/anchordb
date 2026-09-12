@@ -26,10 +26,32 @@ namespace anchordb {
 // interface.
 class FilterDispatch {
   public:
-    FilterDispatch(FilterType t, const Filter *filter = nullptr) : type_(t) {
-        if (type_ == FilterType::UserDefinedFilter) {
-            user_defined_filter_ = filter;
+    FilterDispatch(const Filter **filter = nullptr)
+        : type_(filter != nullptr ? (*filter)->get_type()
+                                  : FilterType::UserDefinedFilter),
+          filter_(*filter) {}
+
+    const char *name() const {
+        switch (type_) {
+        case FilterType::BuiltinBloomFilter:
+            return "anchordb.BuiltinBloomFilter";
+        case FilterType::BuiltinCuckooFilter:
+            return "anchordb.BuiltinCuckooFilter";
+        case FilterType::BuiltinRibbonFilter:
+            return "anchordb.BuiltinRibbonFilter";
+        case FilterType::UserDefinedFilter:
+            return filter_ != nullptr ? filter_->name() : "UserDefinedFilter";
         }
+        // Unreachable — all FilterType values are covered above.  The return
+        // silences compiler warnings.
+        return nullptr;
+    }
+
+    FilterType type() const { return type_; }
+
+    void create_filter(const Slice *keys, size_t n, std::string *dst) const {
+        assert(filter_ != nullptr);
+        filter_->create_filter(keys, n, dst);
     }
 
     bool key_may_match(const Slice &key, const Slice &filter) const {
@@ -43,9 +65,8 @@ class FilterDispatch {
         case FilterType::UserDefinedFilter:
             // A null user-defined filter is treated conservatively (always
             // returns true — no false negatives).
-            return user_defined_filter_ != nullptr
-                       ? user_defined_filter_->key_may_match(key, filter)
-                       : true;
+            return filter_ != nullptr ? filter_->key_may_match(key, filter)
+                                      : true;
         }
         // Unreachable — all FilterType values are covered above.  The return
         // silences compiler warnings.
@@ -53,8 +74,8 @@ class FilterDispatch {
     }
 
   private:
-    FilterType type_;
-    const Filter *user_defined_filter_ = nullptr;
+    const FilterType type_;
+    const Filter *filter_;
 };
 
 } // namespace anchordb

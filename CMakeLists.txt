@@ -57,8 +57,17 @@ target_sources(anchordb
         src/util/filter/ribbon_filter.h
         src/util/filter/ribbon_filter.cc
         src/util/filter/filter_dispatch.h
+        src/db/db_format.h
+        src/db/db_format.cc
+        src/db/wal_format.h
+        src/db/wal_format.cc
+        src/db/wal_reader.h
+        src/db/wal_reader.cc
+        src/db/wal_writer.h
+        src/db/wal_writer.cc
 )
 
+# windows block isn't implemented yet
 if (WIN32)
   target_sources(anchordb
         PRIVATE
@@ -67,6 +76,7 @@ if (WIN32)
             src/env/io_win.h
             src/env/io_win.cc
             src/port/port_win.h
+            src/util/win_logger.h
     )
 elseif (UNIX AND NOT APPLE)
   target_sources(anchordb
@@ -76,6 +86,8 @@ elseif (UNIX AND NOT APPLE)
             src/env/io_posix.h
             src/env/io_posix.cc
             src/port/port_posix.h
+            src/util/posix_logger.h
+
     )
 
   # Locate and link liburing for the io_uring engine layer

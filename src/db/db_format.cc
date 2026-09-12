@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #include "anchordb/slice.h"
-#include "table_format.h"
+#include "db_format.h"
 #include "util/coding.h"
 #include <cassert>
 #include <cstddef>
