@@ -102,6 +102,17 @@ class ANCHORDB_EXPORT Slice {
 
     int compare(const Slice &other) const { return compare_(other); }
 
+    bool operator==(const Slice &other) const {
+        return (size_ == other.size_) &&
+               (std::memcmp(data_, other.data_, size_) == 0);
+    }
+    bool operator!=(const Slice &other) const { return !(*this == other); }
+
+    bool operator<(const Slice &other) const { return compare_(other) < 0; }
+    bool operator<=(const Slice &other) const { return compare_(other) <= 0; }
+    bool operator>(const Slice &other) const { return compare_(other) > 0; }
+    bool operator>=(const Slice &other) const { return compare_(other) >= 0; }
+
   private:
     const char *data_;
     size_t size_;

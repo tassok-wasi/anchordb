@@ -16,8 +16,6 @@
 
 #include "anchordb/slice.h"
 #include "anchordb/status.h"
-#include "wal_format.h"
-#include <cstdint>
 namespace anchordb {
 
 class WritableFileWriter;
@@ -26,22 +24,16 @@ class WALWriter {
   public:
     explicit WALWriter(WritableFileWriter *dest);
 
-    WALWriter(WritableFileWriter *dest, uint64_t dest_len);
-
     WALWriter(const WALWriter &) = delete;
     WALWriter &operator=(const WALWriter &) = delete;
 
     ~WALWriter();
 
-    Status add_record(const Slice &slice);
+    Status append(const Slice &data);
+    Status flush();
 
   private:
-    Status emit_physical_record(WALRecordType type, const char *ptr,
-                                size_t length);
     WritableFileWriter *dest_;
-    int block_offset_;
-
-    uint32_t type_crc_[k_max_wal_record_type + 1];
 };
 
 } // namespace anchordb
