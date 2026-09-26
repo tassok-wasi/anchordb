@@ -106,8 +106,8 @@ Status PosixEnv::new_sequential_file_reader(const std::string &filename,
     size_t buf_size =
         (buffer_size != 0) ? buffer_size : k_seq_file_reader_buf_size;
     AlignedBuffer buf(buf_size, k_o_direct_alignment);
-    *result =
-        new PosixSequentialFileReader(filename, fd, ring, &buf, direct_io_);
+    *result = new PosixSequentialFileReader(filename, fd, ring, &buf, buf_size,
+                                            direct_io_);
 
     return Status::ok();
 }
@@ -163,7 +163,7 @@ Status PosixEnv::new_writable_file_writer(const std::string &filename,
     }
 
     size_t buf_size =
-        (buffer_size != 0) ? buffer_size : k_seq_file_reader_buf_size;
+        (buffer_size != 0) ? buffer_size : k_writable_file_buf_size;
     AlignedBuffer buf(buf_size, k_o_direct_alignment);
     *result = new PosixWritableFileWriter(filename, fd, ring, &buf, direct_io_);
 
@@ -190,9 +190,8 @@ Status PosixEnv::new_appendable_file_writer(const std::string &filename,
     }
 
     size_t buf_size =
-        (buffer_size != 0) ? buffer_size : k_seq_file_reader_buf_size;
+        (buffer_size != 0) ? buffer_size : k_writable_file_buf_size;
     AlignedBuffer buf(buf_size, k_o_direct_alignment);
-    PosixWritableFileWriter file(filename, fd, ring, &buf, direct_io_);
 
     uint64_t file_size = 0;
     Status s = get_file_size(filename, &file_size);
@@ -200,7 +199,9 @@ Status PosixEnv::new_appendable_file_writer(const std::string &filename,
         return s;
     }
 
-    *result = &file;
+    *result = new PosixWritableFileWriter(filename, fd, ring, &buf, direct_io_,
+                                          file_size);
+
     return Status::ok();
 }
 

@@ -45,7 +45,7 @@ class PosixEnv : public Env {
     // Constructs a PosixEnv with |max_open_files| limiting concurrent open
     // file descriptors, |ring_entries| io_uring submission queue entries,
     // and an optional |direct_io_enabled| flag for O_DIRECT on reads.
-    PosixEnv(int max_open_files, uint32_t ring_entries, bool direct_io = true);
+    PosixEnv(int max_open_files, uint32_t ring_entries, bool direct_io = false);
 
     // Destructs the environment, joins background threads, and destroys
     // all io_uring rings (default and thread-local).

@@ -216,57 +216,86 @@ Status PosixRandomAccessFileReader::submit_read_(int fd, void *buf, size_t n,
                                                  size_t *bytes_read) {
     *bytes_read = 0;
     size_t total_read = 0;
+    int sqe_count = 0;
 
+    // Submit all read SQEs in batches bounded by ring capacity.
+    // Each batch is submitted and reaped before the next batch is queued,
+    // so we never have unowned CQEs floating in a shared ring.
     while (total_read < n) {
-        struct io_uring_sqe *sqe = io_uring_get_sqe(ring_);
-        if (!sqe) {
-            int submit_ret = io_uring_submit(ring_);
-            if (submit_ret < 0) {
-                return posix_error(filename_, -submit_ret);
-            }
-            sqe = io_uring_get_sqe(ring_);
-            if (!sqe) {
-                return posix_error(filename_, EBUSY);
-            }
+        // Determine how many SQEs we can queue in this batch.
+        // io_uring_sq_space_left() returns the number of free SQE slots;
+        // cap it to the remaining bytes we need to read.
+        unsigned sq_space = io_uring_sq_space_left(ring_);
+        if (sq_space == 0) {
+            return posix_error(filename_, EBUSY);
         }
 
-        void *current_dst = static_cast<char *>(buf) + total_read;
-        size_t current_len = n - total_read;
-        uint64_t current_offset = offset + total_read;
+        int batch_count = 0;
+        size_t batch_bytes = 0;
 
-        io_uring_prep_read(sqe, fd, current_dst, current_len, current_offset);
-        io_uring_sqe_set_data(sqe, nullptr);
+        while (batch_bytes < n - total_read &&
+               batch_count < static_cast<int>(sq_space)) {
+            struct io_uring_sqe *sqe = io_uring_get_sqe(ring_);
+            if (!sqe) {
+                // Should not happen since we checked sq_space_left, but be
+                // safe.
+                break;
+            }
 
-        int submit_ret = io_uring_submit_and_wait(ring_, 1);
+            void *current_dst =
+                static_cast<char *>(buf) + total_read + batch_bytes;
+            size_t current_len = n - total_read - batch_bytes;
+            uint64_t current_offset = offset + total_read + batch_bytes;
+
+            io_uring_prep_read(sqe, fd, current_dst, current_len,
+                               current_offset);
+            io_uring_sqe_set_data(sqe, nullptr);
+            batch_count++;
+            batch_bytes += current_len;
+        }
+
+        // Submit this batch
+        int submit_ret = io_uring_submit(ring_);
         if (submit_ret < 0) {
             return posix_error(filename_, -submit_ret);
         }
 
-        struct io_uring_cqe *cqe = nullptr;
-        int wait_ret = io_uring_wait_cqe(ring_, &cqe);
-        if (wait_ret < 0) {
-            return posix_error(filename_, -wait_ret);
-        }
-
-        int res = cqe->res;
-        io_uring_cqe_seen(ring_, cqe);
-
-        if (res < 0) {
-            if (-res == EINTR) {
-                continue;
+        // Reap completions for this batch only
+        for (int i = 0; i < batch_count; i++) {
+            struct io_uring_cqe *cqe = nullptr;
+            int wait_ret = io_uring_wait_cqe(ring_, &cqe);
+            if (wait_ret < 0) {
+                return posix_error(filename_, -wait_ret);
             }
-            return posix_error(filename_, -res);
+
+            int res = cqe->res;
+            io_uring_cqe_seen(ring_, cqe);
+
+            if (res < 0) {
+                if (-res == EINTR) {
+                    i--; // retry this completion
+                    continue;
+                }
+                return posix_error(filename_, -res);
+            }
+
+            if (res == 0) {
+                // EOF reached; stop processing further batches
+                total_read += static_cast<size_t>(res);
+                *bytes_read = total_read;
+                return Status::ok();
+            }
+
+            total_read += static_cast<size_t>(res);
+
+            if (direct_io_ && (res % k_o_direct_alignment != 0)) {
+                // Short read under O_DIRECT; stop here
+                *bytes_read = total_read;
+                return Status::ok();
+            }
         }
 
-        if (res == 0) {
-            break;
-        }
-
-        total_read += static_cast<size_t>(res);
-
-        if (direct_io_ && (res % k_o_direct_alignment != 0)) {
-            break;
-        }
+        sqe_count += batch_count;
     }
 
     *bytes_read = total_read;
@@ -305,6 +334,10 @@ Status PosixRandomAccessFileReader::read(uint64_t offset, size_t n,
     size_t read_bytes = n;
     char *target_buf = scratch;
 
+    // Declared at function scope so the bounce buffer outlives the
+    // submit_read_ call below.
+    AlignedBuffer aligned_buf;
+
     if (direct_io_) {
         bool is_scratch_aligned =
             (reinterpret_cast<uintptr_t>(scratch) % k_o_direct_alignment == 0);
@@ -321,12 +354,12 @@ Status PosixRandomAccessFileReader::read(uint64_t offset, size_t n,
                 ~(static_cast<uint64_t>(k_o_direct_alignment) - 1);
             read_bytes = static_cast<size_t>(end_offset - read_offset);
 
-            AlignedBuffer buf(read_bytes, k_o_direct_alignment);
-            if (!buf.is_allocated()) {
+            aligned_buf = AlignedBuffer(read_bytes, k_o_direct_alignment);
+            if (!aligned_buf.is_allocated()) {
                 return Status::io_error(
                     "Failed to allocate sector-aligned buffer for O_DIRECT");
             }
-            target_buf = buf.data();
+            target_buf = aligned_buf.data();
         }
     }
 

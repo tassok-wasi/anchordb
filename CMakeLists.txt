@@ -24,7 +24,7 @@ target_sources(anchordb
             include/anchordb/iterator.h
             include/anchordb/status.h
             include/anchordb/filter.h
-            inclue/anchordb/env.h
+            include/anchordb/env.h
 )
 
 target_sources(anchordb
@@ -32,19 +32,15 @@ target_sources(anchordb
         src/memtable/arena.h
         src/memtable/arena.cc
         src/memtable/mwmr_skiplist.h
-        src/memtable/swmr_skiplist.h
         src/memtable/swsr_skiplist.h
         src/memtable/skiplist.h
         src/memtable/table.h
-        src/memtable/table.cc
-        src/memtable/table_format.h
-        src/memtable/table_format.cc
         src/util/coding.h
         src/util/coding.cc
         src/util/crc32.h
         src/util/crc32.cc
         src/env/env.h
-        src/util/aligned_buffer.cc
+        src/util/aligned_buffer.h
         src/util/comparator.cc
         src/util/status.cc
         src/util/random.h
@@ -59,15 +55,12 @@ target_sources(anchordb
         src/util/filter/filter_dispatch.h
         src/db/db_format.h
         src/db/db_format.cc
-        src/db/wal_format.h
-        src/db/wal_format.cc
         src/db/wal_reader.h
         src/db/wal_reader.cc
         src/db/wal_writer.h
         src/db/wal_writer.cc
 )
 
-# windows block isn't implemented yet
 if (WIN32)
   target_sources(anchordb
         PRIVATE
@@ -78,6 +71,11 @@ if (WIN32)
             src/port/port_win.h
             src/util/win_logger.h
     )
+
+  # Locate and link IOCP for the Windows I/O completion port engine layer
+  # IOCP is part of the Windows SDK, no separate package needed.
+  # Kernel32.lib provides the IOCP functions (CreateIoCompletionPort, etc.)
+  target_link_libraries(anchordb PRIVATE kernel32)
 elseif (UNIX AND NOT APPLE)
   target_sources(anchordb
         PRIVATE
@@ -107,7 +105,7 @@ target_include_directories(anchordb
 
 # MemTable Skiplist Variant Selector
 # this checks will be removed in future when codebase will fully ensure
-#  that there is no nedd for multiple skiplist variants
+#  that there is no need for multiple skiplist variants
 set(SKIPLIST_VARIANT "MWMR" CACHE STRING "Select MemTable SkipList variant (MWMR, SWMR, SWSR)")
 set_property(CACHE SKIPLIST_VARIANT PROPERTY STRINGS "MWMR" "SWMR" "SWSR")
 

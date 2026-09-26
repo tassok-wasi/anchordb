@@ -73,7 +73,7 @@ class PosixSequentialFileReader final : public SequentialFileReader {
     PosixSequentialFileReader(std::string filename, int fd,
                               struct io_uring *ring,
                               AlignedBuffer *buf = nullptr,
-                              size_t buffer_size = 0, bool direct_io = true)
+                              size_t buffer_size = 0, bool direct_io = false)
         : fd_(fd), filename_(std::move(filename)), ring_(ring), offset_(0),
           direct_io_(direct_io), buf_file_offset_(0), buf_bytes_valid_(0) {
         if (buf != nullptr) {
@@ -146,10 +146,11 @@ class PosixRandomAccessFileReader final : public RandomAccessFileReader {
 class PosixWritableFileWriter final : public WritableFileWriter {
   public:
     PosixWritableFileWriter(std::string filename, int fd, struct io_uring *ring,
-                            AlignedBuffer *buf = nullptr, bool direct_io = true)
-        : filename_(std::move(filename)), fd_(fd), ring_(ring), filesize_(0),
-          direct_io_(direct_io), is_manifest_(is_manifest(filename_)),
-          dirname_(dirname(filename_)) {
+                            AlignedBuffer *buf = nullptr, bool direct_io = true,
+                            uint64_t initial_filesize = 0)
+        : filename_(std::move(filename)), fd_(fd), ring_(ring),
+          filesize_(initial_filesize), direct_io_(direct_io),
+          is_manifest_(is_manifest(filename_)), dirname_(dirname(filename_)) {
         if (buf != nullptr) {
             buf_ = std::move(*buf);
         } else {
