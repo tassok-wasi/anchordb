@@ -25,6 +25,8 @@ target_sources(anchordb
             include/anchordb/status.h
             include/anchordb/filter.h
             include/anchordb/env.h
+            include/anchordb/cache.h
+            include/anchordb/options.h
 )
 
 target_sources(anchordb
@@ -59,6 +61,14 @@ target_sources(anchordb
         src/db/wal_reader.cc
         src/db/wal_writer.h
         src/db/wal_writer.cc
+        src/cache/lru.h
+        src/cache/lru.cc
+        src/cache/lirs.h
+        src/cache/lirs.cc
+        src/cache/clock.h
+        src/cache/clock.cc
+        src/cache/arc.h
+        src/cache/arc.cc
 )
 
 if (WIN32)
