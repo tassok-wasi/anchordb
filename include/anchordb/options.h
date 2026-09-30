@@ -15,6 +15,7 @@
 #pragma once
 
 #include "anchordb/export.h"
+#include "anchordb/hash_map.h"
 #include <cstddef>
 namespace anchordb {
 
@@ -25,10 +26,16 @@ class Filter;
 class Logger;
 class Snapshot;
 
-enum CompressionType {
-    kNoCompression = 0x0,
-    kSnappyCompression = 0x1,
-    kZstdCompression = 0x2,
+enum class CompressionType {
+    none = 0x0,
+    snappy = 0x1,
+    zstd = 0x2,
+};
+
+enum class HashMapType {
+    robin_hood = 0x0,
+    linear_probing = 0x1,
+    swiss = 0x2,
 };
 
 struct ANCHORDB_EXPORT Options {
@@ -41,11 +48,12 @@ struct ANCHORDB_EXPORT Options {
     Logger *info_log = nullptr;
     size_t write_buffer_size = 4 * 1024 * 1024;
     int max_open_files = 1000;
+    Map *hash_map = nullptr;
     Cache *block_cache = nullptr;
     size_t block_size = 4 * 1024;
     int block_restart_interval = 16;
     size_t max_file_size = 2 * 1024 * 1024;
-    CompressionType compression = kSnappyCompression;
+    CompressionType compression = CompressionType::snappy;
     int zstd_compression_level = 1;
     bool reuse_logs = false;
     const Filter *filter = nullptr;

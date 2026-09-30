@@ -24,11 +24,11 @@ class Slice;
 // Identifies the concrete filter implementation backing a serialized filter.
 // The value is used by FilterDispatch to select the matching routine without
 // paying vtable overhead on the hot query path.
-enum ANCHORDB_EXPORT FilterType : uint8_t {
-    BuiltinBloomFilter = 0,
-    BuiltinCuckooFilter = 1,
-    BuiltinRibbonFilter = 2,
-    UserDefinedFilter = 3,
+enum class ANCHORDB_EXPORT FilterType : uint8_t {
+    bloom = 0x0,
+    cuckoo = 0x1,
+    ribbon = 0x2,
+    user_defined = 0x3,
 };
 
 // Abstract interface for probabilistic filters (Bloom, Cuckoo, Ribbon, or a
