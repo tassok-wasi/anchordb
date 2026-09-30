@@ -69,6 +69,12 @@ target_sources(anchordb
         src/cache/clock.cc
         src/cache/arc.h
         src/cache/arc.cc
+        src/cache/swiss_map.h
+        src/cache/swiss_map.cc
+        src/cache/robinhood_map.h
+        src/cache/linear_prob_map.h
+        src/cache/list.h
+        src/cache/list.cc
 )
 
 if (WIN32)

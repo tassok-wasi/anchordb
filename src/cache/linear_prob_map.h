@@ -16,6 +16,7 @@
 
 #include "anchordb/hash_map.h"
 #include "anchordb/slice.h"
+#include <bit>
 #include <cstdint>
 #include <utility>
 #include <vector>
@@ -122,10 +123,7 @@ class LinearProbingMap : public Map {
     }
 
     static size_t round_upto_power_of_two_(size_t val) {
-        size_t cap = 16;
-        while (cap < val)
-            cap <<= 1;
-        return cap;
+        return std::bit_ceil(val);
     }
 
     // Shifts back elements that collided behind the deleted slot
@@ -150,14 +148,18 @@ class LinearProbingMap : public Map {
 
     void resize_(size_t new_capacity) {
         std::vector<Bucket> old_buckets = std::move(buckets_);
-
         capacity_ = new_capacity;
         size_ = 0;
         buckets_ = std::vector<Bucket>(capacity_);
 
-        for (auto &bucket : old_buckets) {
+        for (const auto &bucket : old_buckets) {
             if (bucket.occupied) {
-                insert(bucket.key, bucket.value);
+                size_t idx = mask_(bucket.key.hash);
+                while (buckets_[idx].occupied) {
+                    idx = next_index_(idx);
+                }
+                buckets_[idx] = bucket;
+                size_++;
             }
         }
     }

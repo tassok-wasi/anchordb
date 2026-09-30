@@ -62,6 +62,23 @@ char *Arena::allocate_aligned(size_t bytes) {
     return block;
 }
 
+void Arena::reset() {
+    if (!blocks_.empty()) {
+        // Free all blocks except the first one
+        for (size_t i = 1; i < blocks_.size(); ++i) {
+            delete[] blocks_[i];
+        }
+
+        char *first_block = blocks_[0];
+        blocks_.clear();
+        blocks_.push_back(first_block);
+
+        alloc_ptr_ = blocks_[0];
+        alloc_bytes_remaining_ = k_block_size_;
+        memory_usage_ = k_block_size_ + sizeof(char *);
+    }
+}
+
 char *Arena::allocate_fallback(size_t bytes) {
     if (bytes > k_block_size_ / 4) {
         char *block = allocate_new_block(bytes);

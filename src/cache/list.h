@@ -20,6 +20,10 @@ namespace anchordb {
 
 class List {
   public:
+    explicit List(Map *index_map);
+
+    ~List() { clear(); }
+
     List(const List &other);
     List &operator=(const List &other);
 
@@ -66,8 +70,8 @@ class List {
             : key(key), data(data), prev(nullptr), next(nullptr) {}
 
         ~Node() {
-            delete prev;
-            delete next;
+            prev = nullptr;
+            next = nullptr;
         }
     };
 

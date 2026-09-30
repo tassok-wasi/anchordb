@@ -19,6 +19,8 @@
 
 namespace anchordb {
 
+List::List(Map *index_map) : index_map_(index_map), size_(0) {}
+
 Slice List::get(const HashedKey &key) const {
     Slice val = Slice();
     bool ok = index_map_->find(key, val);
@@ -27,6 +29,8 @@ Slice List::get(const HashedKey &key) const {
 
     Node *node = nullptr;
     std::memcpy(&node, val.data(), sizeof(Node *));
+    if (node == nullptr)
+        return Slice();
     return node->data;
 }
 
@@ -219,6 +223,13 @@ void List::unlink_(Node *node) {
     }
     node->prev = nullptr;
     node->next = nullptr;
+}
+
+void List::remove_(Node *node) {
+    unlink_(node);
+    index_map_->erase(HashedKey(node->key));
+    delete node;
+    size_--;
 }
 
 } // namespace anchordb

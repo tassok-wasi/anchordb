@@ -16,9 +16,8 @@
 
 #include "anchordb/hash_map.h"
 #include "anchordb/slice.h"
-#include "port/port.h"
+#include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <vector>
 
 namespace anchordb {
@@ -26,8 +25,13 @@ namespace anchordb {
 class SwissMap : public Map {
   public:
     explicit SwissMap(size_t initial_capacity = 16)
-        : capacity_(round_upto_power_of_two_(initial_capacity)), size_(0) {
-        controls_.resize(capacity_, CTRL_EMPTY);
+        : capacity_(round_upto_power_of_two_(initial_capacity)), size_(0),
+          num_deleted_(0) {
+        // controls_ is over-allocated by one group width. The trailing bytes
+        // mirror the first group and are kept in sync by set_control_(), which
+        // lets a SIMD group load that crosses the end of the table observe the
+        // same bytes the masked index arithmetic would.
+        controls_.assign(capacity_ + kGroupWidth, CTRL_EMPTY);
         slots_.resize(capacity_);
     }
 
@@ -39,10 +43,12 @@ class SwissMap : public Map {
 
     bool erase(const HashedKey &key_to_erase) override;
 
+    // Resets the map to empty while preserving the current capacity.
     void clear() override {
         size_ = 0;
-        controls_.clear();
-        slots_.clear();
+        num_deleted_ = 0;
+        controls_.assign(capacity_ + kGroupWidth, CTRL_EMPTY);
+        slots_.assign(capacity_, Slot{});
     }
 
     size_t size() const override { return size_; }
@@ -54,6 +60,9 @@ class SwissMap : public Map {
         Slice value;
     };
 
+    // Number of control bytes compared per SIMD probe step.
+    static constexpr size_t kGroupWidth = 16;
+
     // Control byte status codes
     static constexpr int8_t CTRL_EMPTY = -128; // 0x80
     static constexpr int8_t CTRL_DELETED = -2; // 0xFE
@@ -64,6 +73,7 @@ class SwissMap : public Map {
     std::vector<Slot> slots_;
     size_t capacity_;
     size_t size_;
+    size_t num_deleted_;
 
     static int8_t extract_h2_(uint64_t hash) {
         return static_cast<int8_t>((hash >> 57) & 0x7F);
@@ -78,6 +88,21 @@ class SwissMap : public Map {
         while (cap < val)
             cap <<= 1;
         return cap;
+    }
+
+    // Compares the group of kGroupWidth control bytes starting at `group`
+    // against the 7-bit fingerprint `h2`.  Returns a bitmask whose set bits
+    // index lanes equal to h2, and sets `has_empty` if any lane is CTRL_EMPTY.
+    // Implemented with SIMD in swiss_map.cc.
+    static uint32_t match_group_(const int8_t *group, int8_t h2,
+                                 bool &has_empty);
+
+    // Writes a control byte, mirroring it into the trailing padding group when
+    // it falls in the first group so wrap-around SIMD loads stay consistent.
+    void set_control_(size_t idx, int8_t value) {
+        controls_[idx] = value;
+        if (idx < kGroupWidth)
+            controls_[capacity_ + idx] = value;
     }
 
     void resize_(size_t new_capacity);

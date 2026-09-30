@@ -34,6 +34,8 @@ class Arena {
 
     size_t memory_usage() const { return memory_usage_; }
 
+    void reset();
+
   private:
     char *allocate_fallback(size_t bytes);
     char *allocate_new_block(size_t block_bytes);

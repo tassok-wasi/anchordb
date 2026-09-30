@@ -16,6 +16,7 @@
 
 #include "anchordb/hash_map.h"
 #include "anchordb/slice.h"
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -127,10 +128,7 @@ class RobinHoodMap : public Map {
     }
 
     static size_t round_upto_power_of_two_(size_t val) {
-        size_t cap = 16;
-        while (cap < val)
-            cap <<= 1;
-        return cap;
+        return std::bit_ceil(val);
     }
 
     // Internal Robin Hood insertion core logic
@@ -166,6 +164,10 @@ class RobinHoodMap : public Map {
 
     // Backward-Shift Deletion algorithm
     void shift_back_(size_t delete_idx) {
+        if (delete_idx >= buckets_.size()) {
+            return;
+        }
+
         size_t curr = delete_idx;
         size_t next = next_index_(curr);
 
