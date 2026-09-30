@@ -104,7 +104,7 @@ template <typename Comparator> class MemTable {
 
     size_t approximate_memory_usage() const { return arena_.memory_usage(); }
 
-    void add(SeqNum seq, ValueType type, const Slice &key, const Slice &value) {
+    void add(seq_num seq, ValueType type, const Slice &key, const Slice &value) {
         // Format of an entry is concatenation of:
         //  key_size     : varint32 of internal_key.size()
         //  key bytes    : char[internal_key.size()]

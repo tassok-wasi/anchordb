@@ -26,16 +26,16 @@ namespace anchordb {
 
 // Distinguishes a live key-value entry from a tombstone (deletion marker).
 // Encoded as the low byte of the 8-byte trailer in an internal key.
-enum ValueType : uint8_t { TypeValue = 0x1, TypeDeletion = 0x0 };
+enum class ValueType : uint8_t { value = 0x1, deletion = 0x0 };
 
-enum ValueFlag : uint8_t { TypeInline = 0x1, TypeBlob = 0x0 };
+enum class ValueFlag : uint8_t { inline_ = 0x1, blob = 0x0 };
 
 // A monotonically increasing global sequence number assigned to every write.
-using SeqNum = uint64_t;
+using seq_num = uint64_t;
 
 // Maximum sequence number that fits in 56 bits (upper 8 bits are reserved for
 // ValueType).
-static const SeqNum k_max_seq_num = ((0x1ul << 56) - 1);
+static const seq_num k_max_seq_num = ((0x1ul << 56) - 1);
 
 // A fully decomposed internal key.  The on-disk / in-memory internal key format
 // is:
@@ -43,11 +43,11 @@ static const SeqNum k_max_seq_num = ((0x1ul << 56) - 1);
 // for a total of user_key.size() + 8 bytes.
 struct ParsedInternalKey {
     Slice user_key;
-    SeqNum sequence;
+    seq_num sequence;
     ValueType type;
 
     ParsedInternalKey() {}
-    ParsedInternalKey(const Slice &u, const SeqNum seq, ValueType t)
+    ParsedInternalKey(const Slice &u, const seq_num seq, ValueType t)
         : user_key(u), sequence(seq), type(t) {}
 };
 
@@ -56,7 +56,7 @@ namespace {
 // Layout: | sequence (56 bits) | type (8 bits) |
 uint64_t pack_seq_and_type(uint64_t seq, ValueType t) {
     assert(seq <= k_max_seq_num);
-    assert(t <= ValueType::TypeValue);
+    assert(t <= ValueType::value);
     return (seq << 8) | static_cast<uint64_t>(t);
 }
 } // namespace
@@ -92,7 +92,7 @@ class InternalKey {
 
   public:
     InternalKey() {}
-    InternalKey(const Slice &user_key, SeqNum s, ValueType t) {
+    InternalKey(const Slice &user_key, seq_num s, ValueType t) {
         append_internal_key(&key_, ParsedInternalKey(user_key, s, t));
     }
 
@@ -127,7 +127,7 @@ class LookUpKey {
   public:
     // Constructs a memtable key for the given user_key and sequence number.
     // The value type is always TypeValue (used for point lookups).
-    LookUpKey(const Slice &user_key, SeqNum sequence);
+    LookUpKey(const Slice &user_key, seq_num sequence);
 
     LookUpKey(const LookUpKey &) = delete;
     LookUpKey &operator=(const LookUpKey &) = delete;
@@ -193,8 +193,8 @@ class InternalKeyComparator {
             user_comparator_->compare(user_start, tmp) < 0) {
             // User key has become shorter physically, but larger logically.
             // Tack on the earliest possible number to the shortened user key.
-            put_fixed_64(
-                &tmp, pack_seq_and_type(k_max_seq_num, ValueType::TypeValue));
+            put_fixed_64(&tmp,
+                         pack_seq_and_type(k_max_seq_num, ValueType::value));
             assert(this->compare(*start, tmp) < 0);
             assert(this->compare(tmp, limit) < 0);
             start->swap(tmp);
@@ -208,8 +208,8 @@ class InternalKeyComparator {
             user_comparator_->compare(user_key, tmp) < 0) {
             // User key has become shorter physically, but larger logically.
             // Tack on the earliest possible number to the shortened user key.
-            put_fixed_64(
-                &tmp, pack_seq_and_type(k_max_seq_num, ValueType::TypeValue));
+            put_fixed_64(&tmp,
+                         pack_seq_and_type(k_max_seq_num, ValueType::value));
             assert(this->compare(*key, tmp) < 0);
             key->swap(tmp);
         }

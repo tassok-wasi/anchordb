@@ -24,7 +24,7 @@ namespace anchordb {
 
 namespace {
 inline uint32_t bloom_hash(const Slice &key) {
-    return hash(key.data(), key.size(), 0xbc9f1d34);
+    return murmurhash2_32(key.data(), key.size(), 0xbc9f1d34);
 }
 } // namespace
 

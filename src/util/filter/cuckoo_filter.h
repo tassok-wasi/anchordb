@@ -30,7 +30,7 @@ inline constexpr size_t k_cuckoo_fingerprint_bits = 8; // 1-byte fingerprint
 namespace {
 
 inline uint32_t cuckoo_hash(const Slice &key) {
-    return hash(key.data(), key.size(), 0xbd1e2a57);
+    return murmurhash2_32(key.data(), key.size(), 0xbd1e2a57);
 }
 
 // Returns a non-zero 1-byte fingerprint.  0 is reserved as the empty-slot

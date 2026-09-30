@@ -26,7 +26,7 @@ inline void free_aligned(void *ptr) { _aligned_free(ptr); }
 #if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) ||             \
     defined(_M_IX86)
 #define HAS_X86 1
-#elif defined(__aarch64__) || defined(_M_ARM64)
+#elif defined(__aarch64__) || defined(_M_ARM64) || defined(__arm__) || defined(_M_ARM)
 #define HAS_ARM 1
 #endif
 

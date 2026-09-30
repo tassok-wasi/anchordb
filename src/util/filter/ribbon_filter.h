@@ -32,15 +32,15 @@ namespace {
 // coefficient is invertible over GF(2) — a requirement for the banded
 // Gaussian elimination to succeed.
 inline uint64_t ribbon_mask(const Slice &key) {
-    const uint32_t h1 = hash(key.data(), key.size(), 0x9e3779b9);
-    const uint32_t h2 = hash(key.data(), key.size(), 0x85ebca6b);
+    const uint32_t h1 = murmurhash2_32(key.data(), key.size(), 0x9e3779b9);
+    const uint32_t h2 = murmurhash2_32(key.data(), key.size(), 0x85ebca6b);
     const uint64_t mask = (static_cast<uint64_t>(h1) << 32) | h2;
     return mask | 1ULL;
 }
 
 // Returns a non-zero 8-bit fingerprint.  The false-positive rate is 2⁻⁸.
 inline uint8_t ribbon_fingerprint(const Slice &key) {
-    const uint32_t h = hash(key.data(), key.size(), 0x47b6137b);
+    const uint32_t h = murmurhash2_32(key.data(), key.size(), 0x47b6137b);
     uint8_t fp = static_cast<uint8_t>(h & 0xFF);
     return fp == 0 ? 1 : fp;
 }
@@ -48,7 +48,7 @@ inline uint8_t ribbon_fingerprint(const Slice &key) {
 // Maps a key to a starting column in [0, num_bits - k_ribbon_width].
 // Precondition: num_bits > k_ribbon_width.
 inline size_t ribbon_start(const Slice &key, size_t num_bits) {
-    const uint32_t h = hash(key.data(), key.size(), 0x47b6137b);
+    const uint32_t h = murmurhash2_32(key.data(), key.size(), 0x47b6137b);
     return static_cast<size_t>(h % (num_bits - k_ribbon_width));
 }
 

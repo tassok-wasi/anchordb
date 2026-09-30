@@ -25,8 +25,8 @@
 
 namespace anchordb {
 
-inline size_t roundup(size_t x, size_t y) { return ((x + y - 1) / y) * y; }
-inline size_t rounddown(size_t x, size_t y) { return (x / y) * y; }
+inline size_t round_up(size_t x, size_t y) { return ((x + y - 1) / y) * y; }
+inline size_t round_down(size_t x, size_t y) { return (x / y) * y; }
 
 inline size_t truncate_to_page_boundary(size_t page_size, size_t s) {
     s -= (s & (page_size - 1));
@@ -40,7 +40,7 @@ class AlignedBuffer {
         : bufstart_(nullptr), capacity_(0), cursize_(0), alignment_(4096) {}
 
     explicit AlignedBuffer(size_t capacity, size_t alignment = 4096)
-        : bufstart_(nullptr), capacity_(roundup(capacity, alignment)),
+        : bufstart_(nullptr), capacity_(round_up(capacity, alignment)),
           cursize_(0), alignment_(alignment) {
         allocate();
     }
@@ -81,7 +81,7 @@ class AlignedBuffer {
         if (copy_data && req_capacity < copy_len) {
             return;
         }
-        size_t new_capacity = roundup(req_capacity, alignment_);
+        size_t new_capacity = round_up(req_capacity, alignment_);
 
         void *raw_ptr = nullptr;
         if (alloc_aligned(&raw_ptr, new_capacity, alignment_) != 0) {

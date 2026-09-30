@@ -28,18 +28,18 @@ class FilterDispatch {
   public:
     FilterDispatch(const Filter **filter = nullptr)
         : type_(filter != nullptr ? (*filter)->get_type()
-                                  : FilterType::UserDefinedFilter),
+                                  : FilterType::user_defined),
           filter_(*filter) {}
 
     const char *name() const {
         switch (type_) {
-        case FilterType::BuiltinBloomFilter:
+        case FilterType::bloom:
             return "anchordb.BuiltinBloomFilter";
-        case FilterType::BuiltinCuckooFilter:
+        case FilterType::cuckoo:
             return "anchordb.BuiltinCuckooFilter";
-        case FilterType::BuiltinRibbonFilter:
+        case FilterType::ribbon:
             return "anchordb.BuiltinRibbonFilter";
-        case FilterType::UserDefinedFilter:
+        case FilterType::user_defined:
             return filter_ != nullptr ? filter_->name() : "UserDefinedFilter";
         }
         // Unreachable — all FilterType values are covered above.  The return
@@ -56,13 +56,13 @@ class FilterDispatch {
 
     bool key_may_match(const Slice &key, const Slice &filter) const {
         switch (type_) {
-        case FilterType::BuiltinBloomFilter:
+        case FilterType::bloom:
             return bloom_key_may_match(key, filter);
-        case FilterType::BuiltinCuckooFilter:
+        case FilterType::cuckoo:
             return cuckoo_key_may_match(key, filter);
-        case FilterType::BuiltinRibbonFilter:
+        case FilterType::ribbon:
             return ribbon_key_may_match(key, filter);
-        case FilterType::UserDefinedFilter:
+        case FilterType::user_defined:
             // A null user-defined filter is treated conservatively (always
             // returns true — no false negatives).
             return filter_ != nullptr ? filter_->key_may_match(key, filter)

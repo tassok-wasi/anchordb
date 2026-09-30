@@ -14,11 +14,15 @@
 
 #pragma once
 
+#include "anchordb/slice.h"
 #include <cstddef>
 #include <cstdint>
 
 namespace anchordb {
 
-uint32_t hash(const char *data, size_t n, uint32_t seed);
+uint32_t murmurhash2_32(const char *data, size_t n, uint32_t seed);
+uint64_t xx_hash64(const Slice &slice, uint64_t seed = 0);
+uint64_t murmurhash3_64(const Slice &slice,
+                        uint64_t seed = 0x9e3779b97f4a7c13ULL);
 
 } // namespace anchordb

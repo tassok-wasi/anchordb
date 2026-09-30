@@ -35,13 +35,13 @@ bool parse_internal_key(const Slice &internal_key, ParsedInternalKey *result) {
     result->sequence = num >> 8;
     result->type = static_cast<ValueType>(c);
     result->user_key = Slice(internal_key.data(), n - 8);
-    return (c <= static_cast<uint8_t>(ValueType::TypeValue));
+    return (c <= static_cast<uint8_t>(ValueType::value));
 }
 
 // Constructs a memtable lookup key.  The wire format is:
 //   | varint32(internal_key_size) | user_key | packed(seq, TypeValue) |
 // The varint32 length prefix is required by the memtable's internal encoding.
-LookUpKey::LookUpKey(const Slice &user_key, SeqNum seq) {
+LookUpKey::LookUpKey(const Slice &user_key, seq_num seq) {
     size_t usize = user_key.size();
     size_t needed = usize + 13;
     char *dst;
@@ -54,7 +54,7 @@ LookUpKey::LookUpKey(const Slice &user_key, SeqNum seq) {
     kstart_ = dst;
     std::memcpy(dst, user_key.data(), usize);
     dst += usize;
-    encode_fixed_64(dst, pack_seq_and_type(seq, ValueType::TypeValue));
+    encode_fixed_64(dst, pack_seq_and_type(seq, ValueType::value));
     dst += 8;
     end_ = dst;
 }

@@ -20,12 +20,5 @@
 #include "port_posix.h"
 #endif
 
-#if defined(_MSC_VER)
-#include <intrin.h>
-#elif defined(HAS_X86)
-#include <x86intrin.h>
-#endif
-
-#if defined(__ARM_FEATURE_CRC32)
-#include <arm_acle.h>
+#if defined(HAS_X86) // just to ignore yellow warnings
 #endif
