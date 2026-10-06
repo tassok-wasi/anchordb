@@ -17,18 +17,16 @@
 #include "anchordb/env.h"
 #include "anchordb/status.h"
 #include "env/io_posix.h"
+#include "util/thread_pool.h"
 #include <bits/types/struct_timeval.h>
-#include <condition_variable>
 #include <cstdint>
 #include <dirent.h>
 #include <fcntl.h>
 #include <liburing.h>
 #include <mutex>
-#include <queue>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
-#include <thread>
 #include <unistd.h>
 #include <vector>
 
@@ -47,8 +45,8 @@ class PosixEnv : public Env {
     // and an optional |direct_io_enabled| flag for O_DIRECT on reads.
     PosixEnv(int max_open_files, uint32_t ring_entries, bool direct_io = false);
 
-    // Destructs the environment, joins background threads, and destroys
-    // all io_uring rings (default and thread-local).
+    // Destructs the environment, drains the background thread pool, and
+    // destroys all io_uring rings (default and thread-local).
     ~PosixEnv() override;
 
     // Returns a thread-local io_uring ring initialized with |ring_entries_|.
@@ -96,15 +94,6 @@ class PosixEnv : public Env {
     void sleep_for_micros(int micros) override;
 
   private:
-    // Represents a pending background task.
-    struct BackgroundTask {
-        void (*function)(void *arg);
-        void *arg;
-    };
-
-    // Main loop for each background worker thread.
-    void bg_thread_main();
-
     // Configuration
     const bool direct_io_;
     const uint32_t ring_entries_;
@@ -118,13 +107,11 @@ class PosixEnv : public Env {
     mutable std::mutex tls_rings_mutex_;
     std::vector<struct io_uring *> registered_tls_rings_;
 
-    // Background thread pool
-    std::mutex bg_work_mutex_;
-    std::condition_variable bg_work_cv_;
-    std::queue<BackgroundTask> bg_work_queue_;
-    std::vector<std::thread> bg_threads_;
-    bool bg_threads_started_{false};
-    bool shutting_down_{false};
+    // Background thread pool backing schedule(). Sized to the number of
+    // hardware threads, with a floor of one worker. Declared last so that it
+    // is destroyed first: its workers may touch the io_uring rings above
+    // while draining, so those rings must outlive the pool.
+    ThreadPool pool{ThreadPool::default_thread_count()};
 };
 
 } // namespace anchordb

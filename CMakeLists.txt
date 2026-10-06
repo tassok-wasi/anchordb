@@ -75,6 +75,8 @@ target_sources(anchordb
         src/cache/linear_prob_map.h
         src/cache/list.h
         src/cache/list.cc
+        src/util/thread_pool.h
+        src/port/port_thread.h
 )
 
 if (WIN32)

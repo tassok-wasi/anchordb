@@ -19,10 +19,11 @@
 #include "util/posix_logger.h"
 
 #include <chrono>
-#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <fcntl.h>
+#include <system_error>
+#include <thread>
 
 namespace anchordb {
 
@@ -39,20 +40,11 @@ PosixEnv::PosixEnv(int max_open_files, uint32_t ring_entries, bool direct_io)
 }
 
 PosixEnv::~PosixEnv() {
-    // Signal background worker threads to stop after finishing remaining
-    // work
-    {
-        std::lock_guard<std::mutex> lock(bg_work_mutex_);
-        shutting_down_ = true;
-        bg_work_cv_.notify_all();
-    }
-
-    // Join background worker threads
-    for (std::thread &th : bg_threads_) {
-        if (th.joinable()) {
-            th.join();
-        }
-    }
+    // Drain the background pool before tearing down the io_uring rings. The
+    // pool's destructor rejects new work, finishes what is already queued,
+    // and joins its workers, so no scheduled task can touch a ring after this
+    // point.
+    pool.shutdown();
 
     // Destroy shared default ring
     io_uring_queue_exit(&default_ring_);
@@ -299,45 +291,9 @@ Status PosixEnv::unlock_file(FileLock *lock) {
 }
 
 void PosixEnv::schedule(void (*function)(void *arg), void *arg) {
-    std::lock_guard<std::mutex> lock(bg_work_mutex_);
-
-    // Lazy-start the dedicated background execution thread on first
-    // scheduled job
-    if (!bg_threads_started_) {
-        bg_threads_started_ = true;
-        bg_threads_.emplace_back([this] { bg_thread_main(); });
-    }
-
-    // Queue the task
-    bg_work_queue_.push(BackgroundTask{function, arg});
-    bg_work_cv_.notify_one();
-}
-
-void PosixEnv::bg_thread_main() {
-    // Note: When this background worker thread starts executing tasks,
-    // any call to get_thread_local_ring() will automatically initialize
-    // a dedicated thread-local io_uring ring and register it inside
-    // tls_rings_mutex_.
-
-    while (true) {
-        BackgroundTask task;
-        {
-            std::unique_lock<std::mutex> lock(bg_work_mutex_);
-            bg_work_cv_.wait(lock, [this] {
-                return shutting_down_ || !bg_work_queue_.empty();
-            });
-
-            if (shutting_down_ && bg_work_queue_.empty()) {
-                return;
-            }
-
-            task = bg_work_queue_.front();
-            bg_work_queue_.pop();
-        }
-
-        // Execute background callback
-        (*task.function)(task.arg);
-    }
+    // Env::schedule reports nothing, so a rejected task (pool shutting down or
+    // no workers available) is dropped. The pool owns that decision.
+    pool.enqueue(function, arg);
 }
 
 Status PosixEnv::get_test_dir(std::string *result) {
