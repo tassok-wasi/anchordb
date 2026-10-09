@@ -14,106 +14,54 @@
 
 #pragma once
 
-#include "anchordb/hash_map.h"
-#include "anchordb/slice.h"
+#include "util.h"
 #include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
 namespace anchordb {
 
-class RobinHoodMap : public Map {
+template <typename T> class RobinHoodMap {
   public:
     explicit RobinHoodMap(size_t initial_capacity = 16)
         : capacity_(round_upto_power_of_two_(initial_capacity)), size_(0) {
         buckets_.resize(capacity_);
     }
 
-    const char *name() const override { return "anchordb.RobinHoodMap"; }
-
-    // Uses pre-computed hash and returns true if found, populating out_value.
-    bool find(const HashedKey &key_to_find, Slice &out_value) const override {
-        if (size_ == 0)
-            return false;
-
-        size_t idx = mask_(key_to_find.hash);
-        uint32_t current_dib = 0;
-
-        while (buckets_[idx].occupied) {
-            // Early termination: If current DIB in probing sequence is greater
-            // than the bucket's DIB, the key cannot exist in the map.
-            if (current_dib > buckets_[idx].dib) {
-                return false;
-            }
-
-            if (buckets_[idx].key.hash == key_to_find.hash &&
-                buckets_[idx].key.key == key_to_find.key) {
-                out_value = buckets_[idx].value;
-                return true;
-            }
-
-            idx = next_index_(idx);
-            current_dib++;
-        }
-
-        return false;
-    }
+    const char *name() const { return "anchordb.RobinHoodMap"; }
+    bool contains(const HashedKey &key) const;
+    T get(const HashedKey &key) const;
 
     // Inserts or updates an entry using its pre-computed hash.
-    void insert(const HashedKey &key_to_insert, const Slice &value) override {
-        if (size_ >= capacity_ * MAX_LOAD_FACTOR) {
+    void insert(const HashedKey &key, T value) {
+        if (size_ >= capacity_ * kMaxLoadFactor) {
             resize_(capacity_ * 2);
         }
 
-        insert_(Bucket{key_to_insert, value, 0, true});
+        insert_(Bucket{key, value, 0, true});
     }
 
     // Erases a key and shifts back elements to prevent tombstones.
-    bool erase(const HashedKey &key_to_erase) override {
-        if (size_ == 0)
-            return false;
+    T remove(const HashedKey &key);
 
-        size_t idx = mask_(key_to_erase.hash);
-        uint32_t current_dib = 0;
-
-        while (buckets_[idx].occupied) {
-            if (current_dib > buckets_[idx].dib) {
-                return false; // Key does not exist
-            }
-
-            if (buckets_[idx].key.hash == key_to_erase.hash &&
-                buckets_[idx].key.key == key_to_erase.key) {
-                // Key found -> Perform Backward Shift
-                shift_back_(idx);
-                size_--;
-                return true;
-            }
-
-            idx = next_index_(idx);
-            current_dib++;
-        }
-
-        return false;
-    }
-
-    void clear() override {
+    void clear() {
         size_ = 0;
         buckets_.clear();
     }
 
     // Capacity & Size Helpers
-    size_t size() const override { return size_; }
-    size_t capacity() const override { return capacity_; }
+    size_t size() const { return size_; }
+    size_t capacity() const { return capacity_; }
 
   private:
     struct Bucket {
-        HashedKey key;
-        Slice value;
+        HashedKey hashed_key;
+        T value;
         uint32_t dib{0};
         bool occupied{false};
     };
 
-    static constexpr double MAX_LOAD_FACTOR = 0.85;
+    static constexpr double kMaxLoadFactor = 0.85;
     std::vector<Bucket> buckets_;
     size_t capacity_;
     size_t size_;
@@ -132,74 +80,158 @@ class RobinHoodMap : public Map {
     }
 
     // Internal Robin Hood insertion core logic
-    void insert_(Bucket incoming) {
-        size_t idx = mask_(incoming.key.hash);
-
-        while (true) {
-            // Empty bucket found -> place entry directly
-            if (!buckets_[idx].occupied) {
-                buckets_[idx] = incoming;
-                size_++;
-                return;
-            }
-
-            // Key already exists -> overwrite value
-            if (buckets_[idx].key.hash == incoming.key.hash &&
-                buckets_[idx].key.key == incoming.key.key) {
-                buckets_[idx].value = incoming.value;
-                return;
-            }
-
-            // Robin Hood Eviction ("Steal from the rich, give to the
-            // poor")
-            if (incoming.dib > buckets_[idx].dib) {
-                std::swap(incoming, buckets_[idx]);
-            }
-
-            // Advance probe step for displaced entry
-            idx = next_index_(idx);
-            incoming.dib++;
-        }
-    }
+    void insert_(Bucket incoming);
 
     // Backward-Shift Deletion algorithm
-    void shift_back_(size_t delete_idx) {
-        if (delete_idx >= buckets_.size()) {
+    void shift_back_(size_t delete_idx);
+
+    // Resize and re-hash all entries
+    void resize_(size_t new_capacity);
+};
+
+template <typename T>
+bool RobinHoodMap<T>::contains(const HashedKey &key) const {
+    if (size_ == 0)
+        return false;
+
+    size_t idx = mask_(key.hash);
+    uint32_t current_dib = 0;
+
+    while (buckets_[idx].occupied) {
+        // Early termination: If current DIB in probing sequence is greater
+        // than the bucket's DIB, the key cannot exist in the map.
+        if (current_dib > buckets_[idx].dib) {
+            return false;
+        }
+
+        if (buckets_[idx].hashed_key.hash == key.hash &&
+            buckets_[idx].hashed_key.key == key.key) {
+            return true;
+        }
+
+        idx = next_index_(idx);
+        current_dib++;
+    }
+
+    return false;
+}
+
+template <typename T> T RobinHoodMap<T>::get(const HashedKey &key) const {
+    if (size_ == 0)
+        return T();
+
+    size_t idx = mask_(key.hash);
+    uint32_t current_dib = 0;
+
+    while (buckets_[idx].occupied) {
+        // Early termination: If current DIB in probing sequence is greater
+        // than the bucket's DIB, the key cannot exist in the map.
+        if (current_dib > buckets_[idx].dib) {
+            return T();
+        }
+
+        if (buckets_[idx].hashed_key.hash == key.hash &&
+            buckets_[idx].hashed_key.key == key.key) {
+            return buckets_[idx].value;
+        }
+
+        idx = next_index_(idx);
+        current_dib++;
+    }
+
+    return T();
+}
+
+template <typename T> void RobinHoodMap<T>::insert_(Bucket incoming) {
+    size_t idx = mask_(incoming.hashed_key.hash);
+
+    while (true) {
+        // Empty bucket found -> place entry directly
+        if (!buckets_[idx].occupied) {
+            buckets_[idx] = incoming;
+            size_++;
             return;
         }
 
-        size_t curr = delete_idx;
-        size_t next = next_index_(curr);
-
-        while (buckets_[next].occupied && buckets_[next].dib > 0) {
-            buckets_[curr] = buckets_[next];
-            buckets_[curr].dib--; // Entry is moved 1 step closer to home bucket
-            curr = next;
-            next = next_index_(next);
+        // Key already exists -> overwrite value
+        if (buckets_[idx].hashed_key.hash == incoming.hashed_key.hash &&
+            buckets_[idx].hashed_key.key == incoming.hashed_key.key) {
+            buckets_[idx].value = incoming.value;
+            return;
         }
 
-        // Clear the trailing bucket
-        buckets_[curr] = Bucket{};
+        // Robin Hood Eviction ("Steal from the rich, give to the
+        // poor")
+        if (incoming.dib > buckets_[idx].dib) {
+            std::swap(incoming, buckets_[idx]);
+        }
+
+        // Advance probe step for displaced entry
+        idx = next_index_(idx);
+        incoming.dib++;
+    }
+}
+
+template <typename T> T RobinHoodMap<T>::remove(const HashedKey &key) {
+    if (size_ == 0)
+        return T();
+
+    size_t idx = mask_(key.hash);
+    uint32_t current_dib = 0;
+
+    T result;
+
+    while (buckets_[idx].occupied) {
+        if (current_dib > buckets_[idx].dib) {
+            return T(); // Key does not exist
+        }
+
+        if (buckets_[idx].hashed_key.hash == key.hash &&
+            buckets_[idx].hashed_key.key == key.key) {
+            result = buckets_[idx].value;
+            shift_back_(idx);
+            size_--;
+            return result;
+        }
+
+        idx = next_index_(idx);
+        current_dib++;
     }
 
-    // Resize and re-hash all entries
-    void resize_(size_t new_capacity) {
-        std::vector<Bucket> old_buckets = std::move(buckets_);
+    return T();
+}
 
-        capacity_ = new_capacity;
-        size_ = 0;
-        buckets_ = std::vector<Bucket>(capacity_);
+template <typename T> void RobinHoodMap<T>::shift_back_(size_t delete_idx) {
+    if (delete_idx >= buckets_.size()) {
+        return;
+    }
 
-        for (const auto &bucket : old_buckets) {
-            if (bucket.occupied) {
-                insert_(Bucket{bucket.key, bucket.value, 0, true});
-            }
+    size_t curr = delete_idx;
+    size_t next = next_index_(curr);
+
+    while (buckets_[next].occupied && buckets_[next].dib > 0) {
+        buckets_[curr] = buckets_[next];
+        buckets_[curr].dib--; // Entry is moved 1 step closer to home bucket
+        curr = next;
+        next = next_index_(next);
+    }
+
+    // Clear the trailing bucket
+    buckets_[curr] = Bucket{};
+}
+
+template <typename T> void RobinHoodMap<T>::resize_(size_t new_capacity) {
+    std::vector<Bucket> old_buckets = std::move(buckets_);
+
+    capacity_ = new_capacity;
+    size_ = 0;
+    buckets_ = std::vector<Bucket>(capacity_);
+
+    for (const auto &bucket : old_buckets) {
+        if (bucket.occupied) {
+            insert_(Bucket{bucket.hashed_key, bucket.value, 0, true});
         }
     }
-};
-
-inline Map *robin_hood_map(size_t initial_capacity) {
-    return new RobinHoodMap(initial_capacity);
 }
 
 } // namespace anchordb

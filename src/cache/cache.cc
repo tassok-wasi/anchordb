@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "anchordb/cache.h"
 
-// will be implemented sooner.
-namespace anchordb {}
+namespace anchordb {
+
+Cache::~Cache() = default;
+
+} // namespace anchordb
