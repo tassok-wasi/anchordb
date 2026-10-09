@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "port/port.h"
+#include "port/port.h" // IWYU pragma: keep
 #include "port/port_posix.h"
 #include <algorithm>
 #include <cassert>

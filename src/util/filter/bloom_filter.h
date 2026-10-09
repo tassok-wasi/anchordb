@@ -47,9 +47,7 @@ class BloomFilter : public Filter {
 
     const char *name() const override { return "anchordb.BuiltinBloomFilter"; }
 
-    FilterType get_type() const override {
-        return FilterType::BuiltinBloomFilter;
-    }
+    FilterType get_type() const override { return FilterType::Bloom; }
 
     void create_filter(const Slice *keys, size_t n,
                        std::string *dst) const override;

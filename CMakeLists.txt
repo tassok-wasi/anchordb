@@ -61,22 +61,24 @@ target_sources(anchordb
         src/db/wal_reader.cc
         src/db/wal_writer.h
         src/db/wal_writer.cc
+        src/cache/cache.cc
+        src/cache/util.h
         src/cache/lru.h
         src/cache/lru.cc
         src/cache/lirs.h
         src/cache/lirs.cc
-        src/cache/clock.h
-        src/cache/clock.cc
-        src/cache/arc.h
-        src/cache/arc.cc
+        src/cache/clock_pro.h
+        src/cache/clock_pro.cc
+        src/cache/circular_ring.h
+        src/cache/circular_ring.cc
         src/cache/swiss_map.h
-        src/cache/swiss_map.cc
         src/cache/robinhood_map.h
         src/cache/linear_prob_map.h
         src/cache/list.h
-        src/cache/list.cc
         src/util/thread_pool.h
         src/port/port_thread.h
+        src/cache/arc.h
+        src/cache/arc.cc
 )
 
 if (WIN32)

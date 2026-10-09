@@ -25,10 +25,10 @@ class Slice;
 // The value is used by FilterDispatch to select the matching routine without
 // paying vtable overhead on the hot query path.
 enum class ANCHORDB_EXPORT FilterType : uint8_t {
-    bloom = 0x0,
-    cuckoo = 0x1,
-    ribbon = 0x2,
-    user_defined = 0x3,
+    Bloom = 0x0,
+    Cuckoo = 0x1,
+    Ribbon = 0x2,
+    UserDefined = 0x3,
 };
 
 // Abstract interface for probabilistic filters (Bloom, Cuckoo, Ribbon, or a

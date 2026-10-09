@@ -72,9 +72,7 @@ class RibbonFilter : public Filter {
 
     const char *name() const override { return "anchordb.BuiltinRibbonFilter"; }
 
-    FilterType get_type() const override {
-        return FilterType::BuiltinRibbonFilter;
-    }
+    FilterType get_type() const override { return FilterType::Cuckoo; }
 
     void create_filter(const Slice *keys, size_t n,
                        std::string *dst) const override;

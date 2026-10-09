@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #include "crc32.h"
-#include "port/port.h"
+#include "port/port.h" // IWYU pragma: keep
 #include <cstddef>
 #include <cstdint>
 #include <cstring>

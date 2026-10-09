@@ -25,7 +25,7 @@ const char *Status::copy_state(const char *state) {
 }
 
 Status::Status(Code code, const Slice &msg, const Slice &msg2) {
-    assert(code != k_ok);
+    assert(code != Code::Ok);
     const uint32_t len1 = static_cast<uint32_t>(msg.size());
     const uint32_t len2 = static_cast<uint32_t>(msg2.size());
     const uint32_t size = len1 + (len2 ? (2 + len2) : 0);
@@ -48,22 +48,22 @@ std::string Status::str() const {
         char tmp[30];
         const char *type;
         switch (code()) {
-        case k_ok:
+        case Code::Ok:
             type = "OK";
             break;
-        case k_not_found:
+        case Code::NotFound:
             type = "NotFound: ";
             break;
-        case k_corruption:
+        case Code::Corruption:
             type = "Corruption: ";
             break;
-        case k_not_supported:
+        case Code::NotSupported:
             type = "Not implemented: ";
             break;
-        case k_invalid_argument:
+        case Code::InvalidArgument:
             type = "Invalid argument: ";
             break;
-        case k_io_error:
+        case Code::IoError:
             type = "IO error: ";
             break;
         default:

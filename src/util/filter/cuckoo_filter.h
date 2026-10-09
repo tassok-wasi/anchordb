@@ -72,9 +72,7 @@ class CuckooFilter : public Filter {
 
     const char *name() const override { return "anchordb.BuiltinCuckooFilter"; }
 
-    FilterType get_type() const override {
-        return FilterType::BuiltinCuckooFilter;
-    }
+    FilterType get_type() const override { return FilterType::Cuckoo; }
 
     void create_filter(const Slice *keys, size_t n,
                        std::string *dst) const override;

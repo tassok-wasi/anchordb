@@ -48,56 +48,56 @@ class ANCHORDB_EXPORT Status {
 
     // Return error status of an appropriate type.
     static Status not_found(const Slice &msg, const Slice &msg2 = Slice()) {
-        return Status(k_not_found, msg, msg2);
+        return Status(Code::NotFound, msg, msg2);
     }
     static Status corruption(const Slice &msg, const Slice &msg2 = Slice()) {
-        return Status(k_corruption, msg, msg2);
+        return Status(Code::Corruption, msg, msg2);
     }
     static Status not_supported(const Slice &msg, const Slice &msg2 = Slice()) {
-        return Status(k_not_supported, msg, msg2);
+        return Status(Code::NotSupported, msg, msg2);
     }
     static Status invalid_argument(const Slice &msg,
                                    const Slice &msg2 = Slice()) {
-        return Status(k_invalid_argument, msg, msg2);
+        return Status(Code::InvalidArgument, msg, msg2);
     }
     static Status io_error(const Slice &msg, const Slice &msg2 = Slice()) {
-        return Status(k_io_error, msg, msg2);
+        return Status(Code::IoError, msg, msg2);
     }
 
     // Returns true iff the status indicates success.
     bool is_ok() const { return (state_ == nullptr); }
 
     // Returns true iff the status indicates a NotFound error.
-    bool is_not_found() const { return code() == k_not_found; }
+    bool is_not_found() const { return code() == Code::NotFound; }
 
     // Returns true iff the status indicates a Corruption error.
-    bool is_corruption() const { return code() == k_corruption; }
+    bool is_corruption() const { return code() == Code::Corruption; }
 
     // Returns true iff the status indicates an IOError.
-    bool is_io_error() const { return code() == k_io_error; }
+    bool is_io_error() const { return code() == Code::IoError; }
 
     // Returns true iff the status indicates a NotSupportedError.
-    bool is_not_supported_error() const { return code() == k_not_supported; }
+    bool is_not_supported_error() const { return code() == Code::NotSupported; }
 
     // Returns true iff the status indicates an InvalidArgument.
-    bool is_invalid_argument() const { return code() == k_invalid_argument; }
+    bool is_invalid_argument() const { return code() == Code::InvalidArgument; }
 
     // Return a string representation of this status suitable for printing.
     // Returns the string "OK" for success.
     std::string str() const;
 
   private:
-    enum Code {
-        k_ok = 0,
-        k_not_found = 1,
-        k_corruption = 2,
-        k_not_supported = 3,
-        k_invalid_argument = 4,
-        k_io_error = 5
+    enum class Code {
+        Ok = 0,
+        NotFound = 1,
+        Corruption = 2,
+        NotSupported = 3,
+        InvalidArgument = 4,
+        IoError = 5
     };
 
     Code code() const {
-        return (state_ == nullptr) ? k_ok : static_cast<Code>(state_[4]);
+        return (state_ == nullptr) ? Code::Ok : static_cast<Code>(state_[4]);
     }
 
     Status(Code code, const Slice &msg, const Slice &msg2);
