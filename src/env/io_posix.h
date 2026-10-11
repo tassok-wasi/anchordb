@@ -212,14 +212,14 @@ class PosixFileLock : public FileLock {
 // In-process set of locked files. Prevents double-locking. Thread-safe.
 class PosixLockTable {
   public:
-    bool insert(const std::string &fname) __attribute__((locks_excluded(mu_))) {
+    bool insert(const std::string &fname) {
         mu_.lock();
         bool succeeded = locked_files_.insert(fname).second;
         mu_.unlock();
         return succeeded;
     }
 
-    void remove(const std::string &fname) __attribute__((locks_excluded(mu_))) {
+    void remove(const std::string &fname) {
         mu_.lock();
         locked_files_.erase(fname);
         mu_.unlock();
@@ -227,7 +227,7 @@ class PosixLockTable {
 
   private:
     std::mutex mu_;
-    std::set<std::string> locked_files_ __attribute__((guarded_by(mu_)));
+    std::set<std::string> locked_files_;
 };
 
 } // namespace anchordb
