@@ -82,7 +82,7 @@ target_sources(anchordb
 )
 
 if (WIN32)
-  target_sources(anchordb
+    target_sources(anchordb
         PRIVATE
             src/env/env_win.h
             src/env/env_win.cc
@@ -92,12 +92,12 @@ if (WIN32)
             src/util/win_logger.h
     )
 
-  # Locate and link IOCP for the Windows I/O completion port engine layer
-  # IOCP is part of the Windows SDK, no separate package needed.
-  # Kernel32.lib provides the IOCP functions (CreateIoCompletionPort, etc.)
-  target_link_libraries(anchordb PRIVATE kernel32)
+    # Locate and link IOCP for the Windows I/O completion port engine layer
+    # IOCP is part of the Windows SDK, no separate package needed.
+    # Kernel32.lib provides the IOCP functions (CreateIoCompletionPort, etc.)
+    target_link_libraries(anchordb PRIVATE kernel32)
 elseif (UNIX AND NOT APPLE)
-  target_sources(anchordb
+    target_sources(anchordb
         PRIVATE
             src/env/env_posix.h
             src/env/env_posix.cc
@@ -108,11 +108,11 @@ elseif (UNIX AND NOT APPLE)
 
     )
 
-  # Locate and link liburing for the io_uring engine layer
-  find_package(PkgConfig REQUIRED)
-  pkg_check_modules(LIBURING REQUIRED liburing)
-  target_include_directories(anchordb PRIVATE ${LIBURING_INCLUDE_DIRS})
-  target_link_libraries(anchordb PRIVATE ${LIBURING_LIBRARIES})
+    # Locate and link liburing for the io_uring engine layer
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(LIBURING REQUIRED liburing)
+    target_include_directories(anchordb PRIVATE ${LIBURING_INCLUDE_DIRS})
+    target_link_libraries(anchordb PRIVATE ${LIBURING_LIBRARIES})
 endif()
 
 target_include_directories(anchordb
@@ -123,42 +123,73 @@ target_include_directories(anchordb
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-# MemTable Skiplist Variant Selector
-# this checks will be removed in future when codebase will fully ensure
-#  that there is no need for multiple skiplist variants
-set(SKIPLIST_VARIANT "MWMR" CACHE STRING "Select MemTable SkipList variant (MWMR, SWMR, SWSR)")
-set_property(CACHE SKIPLIST_VARIANT PROPERTY STRINGS "MWMR" "SWMR" "SWSR")
-
-if (SKIPLIST_VARIANT STREQUAL "SWMR")
-  target_compile_definitions(anchordb PUBLIC SWMR_MEMTABLE_SKIPLIST)
-elseif (SKIPLIST_VARIANT STREQUAL "SWSR")
-  target_compile_definitions(anchordb PUBLIC SWSR_MEMTABLE_SKIPLIST)
-else()
-  target_compile_definitions(anchordb PUBLIC MWMR_MEMTABLE_SKIPLIST)
-endif()
-
 # Compiler flags for hardware acceleration
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|i[3-6]86")
-  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
-    target_compile_options(anchordb PRIVATE -msse4.2 -mavx2)
-  elseif(MSVC)
-    target_compile_options(anchordb PRIVATE /arch:AVX2)
-  endif()
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+        target_compile_options(anchordb PRIVATE -msse4.2 -mavx2)
+    elseif(MSVC)
+        target_compile_options(anchordb PRIVATE /arch:AVX2)
+    endif()
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64|ARM64")
-  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
-    target_compile_options(anchordb PRIVATE -march=armv8-a+crc+simd)
-  endif()
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+        target_compile_options(anchordb PRIVATE -march=armv8-a+crc+simd)
+    endif()
 endif()
 
 # IPO (Interprocedural Optimization)
 include(CheckIPOSupported)
 check_ipo_supported(RESULT ipo_supported OUTPUT ipo_error)
 if(ipo_supported)
-  # Enables Link-Time Optimization for maximum cross-translation-unit inlining
-  set_target_properties(anchordb PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
+    # Enables Link-Time Optimization for maximum cross-translation-unit inlining
+    set_target_properties(anchordb PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
+endif()
+
+include(CheckCXXSymbolExists)
+check_cxx_symbol_exists(fdatasync "unistd.h" HAS_FDATASYNC)
+check_cxx_symbol_exists(F_FULLFSYNC "fcntl.h" HAS_FULLFSYNC)
+check_cxx_symbol_exists(O_CLOEXEC "fcntl.h" HAS_O_CLOEXEC)
+
+if (HAVE_FDATASYNC)
+    target_compile_definitions(anchordb PRIVATE HAS_FDATASYNC=1)
+elseif(HAVE_FULLFSYNC)
+    target_compile_definitions(anchordb PRIVATE HAS_FULLFSYNC=1)
+endif()
+
+if (HAVE_O_CLOEXEC)
+    target_compile_definitions(anchordb PRIVATE HAS_O_CLOEXEC=1)
+endif()
+
+find_package(zstd CONFIG)
+if(zstd_FOUND)
+    target_link_libraries(anchordb PRIVATE zstd::libzstd)
+    target_compile_definitions(anchordb PRIVATE HAS_ZSTD=1)
+    message(STATUS "Zstd found! Enabling Zstd block compression.")
+else()
+    message(STATUS "Zstd NOT found. Disabling Zstd support.")
 endif()
 
 
-# they aren't implemented yet
-# include(CheckLibraryExists)
-# check_library_exists(snappy snappy_compress "" HAVE_SNAPPY)
+find_package(Snappy CONFIG)
+if(Snappy_FOUND)
+    target_link_libraries(anchordb PRIVATE Snappy::snappy)
+    target_compile_definitions(anchordb PRIVATE HAS_SNAPPY=1)
+    message(STATUS "Snappy found! Enabling Snappy block compression.")
+else()
+    message(STATUS "Snappy NOT found. Disabling Snappy support.")
+endif()
+
+
+# ---------- testing not set up yet ----------
+
+# enable_testing()
+
+# add_executable(anchordb_test test_main.cpp)
+# target_link_libraries(anchordb_test PRIVATE
+#     GTest::gtest_main  # Provides the standard main() entry point for tests
+#     GTest::gtest       # Core GoogleTest library
+#     # Link your storage engine library/objects here too
+# )
+
+# # Enable CTest integration so you can run tests with 'ctest'
+# include(GoogleTest)
+# gtest_discover_tests(anchordb_test)

@@ -81,7 +81,7 @@ struct io_uring *PosixEnv::get_thread_local_ring() {
 Status PosixEnv::new_sequential_file_reader(const std::string &filename,
                                             SequentialFileReader **result,
                                             size_t buffer_size) {
-    int flags = O_RDONLY | O_CLOEXEC;
+    int flags = O_RDONLY | kOpenBaseFlags;
     if (direct_io_) {
         flags |= O_DIRECT;
     }
@@ -110,7 +110,7 @@ PosixEnv::new_random_access_file_reader(const std::string &filename,
     int fd = -1;
 
     if (fd_limiter_.acquire()) {
-        int flags = O_RDONLY | O_CLOEXEC;
+        int flags = O_RDONLY | kOpenBaseFlags;
         if (direct_io_) {
             flags |= O_DIRECT;
         }
@@ -138,7 +138,7 @@ PosixEnv::new_random_access_file_reader(const std::string &filename,
 Status PosixEnv::new_writable_file_writer(const std::string &filename,
                                           WritableFileWriter **result,
                                           size_t buffer_size) {
-    int flags = O_CREAT | O_WRONLY | O_TRUNC | O_CLOEXEC;
+    int flags = O_CREAT | O_WRONLY | O_TRUNC | kOpenBaseFlags;
     if (direct_io_) {
         flags |= O_DIRECT;
     }
@@ -165,7 +165,7 @@ Status PosixEnv::new_writable_file_writer(const std::string &filename,
 Status PosixEnv::new_appendable_file_writer(const std::string &filename,
                                             WritableFileWriter **result,
                                             size_t buffer_size) {
-    int flags = O_CREAT | O_WRONLY | O_APPEND | O_CLOEXEC;
+    int flags = O_CREAT | O_WRONLY | O_APPEND | kOpenBaseFlags;
     if (direct_io_) {
         flags |= O_DIRECT;
     }
@@ -257,7 +257,7 @@ Status PosixEnv::rename_file(const std::string &from, const std::string &to) {
 Status PosixEnv::lock_file(const std::string &filename, FileLock **lock) {
     *lock = nullptr;
 
-    int fd = ::open(filename.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0644);
+    int fd = ::open(filename.c_str(), O_RDWR | O_CREAT | kOpenBaseFlags, 0644);
     if (fd < 0) {
         return posix_error(filename, errno);
     }
@@ -315,8 +315,8 @@ Status PosixEnv::get_test_dir(std::string *result) {
 }
 
 Status PosixEnv::new_logger(const std::string &filename, Logger **result) {
-    int fd = ::open(filename.c_str(), O_APPEND | O_WRONLY | O_CREAT | O_CLOEXEC,
-                    0644);
+    int fd = ::open(filename.c_str(),
+                    O_APPEND | O_WRONLY | O_CREAT | kOpenBaseFlags, 0644);
     if (fd < 0) {
         *result = nullptr;
         return posix_error(filename, errno);

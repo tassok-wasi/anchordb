@@ -15,10 +15,33 @@
 #pragma once
 
 #if defined(_WIN32)
-#include "port_win.h"
+    #include "port_win.h"
 #else
-#include "port_posix.h"
+    #include "port_posix.h" // IWYU pragma: keep
 #endif
 
-#if defined(HAS_X86) // just to ignore yellow warnings
+#include "port_stdcxx.h" // IWYU pragma: keep
+
+#if defined(_MSC_VER)
+    #include <intrin.h>
+#elif defined(HAS_X86)
+    #include <x86intrin.h>
 #endif
+
+#if defined(__ARM_FEATURE_CRC32)
+    #include <arm_acle.h>
+#endif
+
+#if defined(HAS_X86)
+    #include <immintrin.h>
+#elif defined(HAS_ARM)
+    #include <arm_neon.h>
+#endif
+
+#if HAS_SNAPPY
+    #include <snappy.h>
+#endif // HAVE_SNAPPY
+#if HAS_ZSTD
+    #include <algorithm>
+    #include <zstd.h>
+#endif // HAVE_ZSTD

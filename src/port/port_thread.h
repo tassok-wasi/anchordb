@@ -23,10 +23,10 @@
 // return value instead, so the pool can degrade gracefully.
 
 #if defined(_WIN32)
-#include <process.h>
-#include <windows.h>
+    #include <process.h>
+    #include <windows.h>
 #else
-#include <pthread.h>
+    #include <pthread.h>
 #endif
 
 #if defined(_WIN32)
