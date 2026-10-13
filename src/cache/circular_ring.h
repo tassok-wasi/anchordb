@@ -35,22 +35,18 @@ class CircularRing {
     bool is_empty() const { return head_ == nullptr; }
     size_t size() const { return size_; }
 
-    bool contains(const HashedKey &key) const {
-        return index_map_.contains(key);
-    }
+    bool contains(HashedKey key) const { return index_map_.contains(key); }
 
-    ClockProHandle *get(const HashedKey &key) const {
-        return index_map_.get(key);
-    }
+    ClockProHandle *get(HashedKey key) const { return index_map_.get(key); }
 
     // Circular insertion primitives
-    void push_back(const HashedKey &key, ClockProHandle *handle);
+    void push_back(HashedKey key, ClockProHandle *handle);
     void insert_before(ClockProHandle *target, ClockProHandle *handle);
     void insert_after(ClockProHandle *target, ClockProHandle *handle);
 
     // Unlinks from circular ring and map index without freeing handle memory
     void remove(ClockProHandle *handle);
-    void remove(const HashedKey &key);
+    void remove(HashedKey key);
 
     ClockProHandle *head() const { return head_; }
 

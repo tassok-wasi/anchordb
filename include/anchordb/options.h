@@ -26,7 +26,7 @@ class Filter;
 class Logger;
 class Snapshot;
 
-enum class ANCHORDB_EXPORT CompressionType : uint8_t {
+enum class ANCHORDB_EXPORT CompressionType {
     None = 0x0,
     Snappy = 0x1,
     Zstd = 0x2,
@@ -57,6 +57,17 @@ struct ANCHORDB_EXPORT Options {
     int zstd_compression_level = 1;
     bool reuse_logs = false;
     const Filter *filter = nullptr;
+};
+
+struct ANCHORDB_EXPORT ReadOptions {
+    bool verify_checksums = false;
+    bool fill_cache = true;
+};
+
+struct ANCHORDB_EXPORT WriteOptions {
+    WriteOptions() = default;
+
+    bool sync = false;
 };
 
 } // namespace anchordb

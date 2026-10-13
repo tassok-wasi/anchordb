@@ -16,53 +16,26 @@
 
 #include "anchordb/export.h"
 #include <cstddef>
-#include <cstdint>
 #include <string>
 namespace anchordb {
-class Slice;
 
-// Identifies the concrete filter implementation backing a serialized filter.
-// The value is used by FilterDispatch to select the matching routine without
-// paying vtable overhead on the hot query path.
-enum class ANCHORDB_EXPORT FilterType : uint8_t {
-    Bloom = 0x0,
-    Cuckoo = 0x1,
-    Ribbon = 0x2,
-    UserDefined = 0x3,
+struct ANCHORDB_EXPORT Filter {
+    // We use a void* to hold a pointer to the filter's configuration state,
+    const void *state = nullptr;
+
+    const char *(*name)(const void *state) = nullptr;
+    void (*create_filter)(const void *state, const std::string_view *keys,
+                          size_t n, std::string *dst) = nullptr;
+    bool (*key_may_match)(const void *state, std::string_view key,
+                          std::string_view filter) = nullptr;
+
+    // Optional destructor function pointer to clean up config state if it was
+    // heap-allocated
+    void (*destroy)(const void *state) = nullptr;
 };
 
-// Abstract interface for probabilistic filters (Bloom, Cuckoo, Ribbon, or a
-// user-supplied implementation).
-//
-// A filter answers the question "might this key be present?" with no false
-// negatives: if key_may_match returns false the key is definitely absent, and
-// if it returns true the key is only *probably* present.
-class ANCHORDB_EXPORT Filter {
-  public:
-    virtual ~Filter() = default;
+Filter ANCHORDB_EXPORT new_bloom_filter(size_t bits_per_key);
+Filter ANCHORDB_EXPORT new_cuckoo_filter();
+Filter ANCHORDB_EXPORT new_ribbon_filter(size_t bits_per_key);
 
-    // Human-readable, stable identifier for this filter implementation.
-    virtual const char *name() const = 0;
-
-    // The FilterType tag used to dispatch matching for serialized filters.
-    virtual FilterType get_type() const = 0;
-
-    // Serializes a filter for the given keys, appending the result to `dst`.
-    // `keys` must be non-null when `n > 0`. The output is self-describing
-    // (it encodes everything the matching routine needs to interpret it).
-    virtual void create_filter(const Slice *keys, size_t n,
-                               std::string *dst) const = 0;
-
-    // Returns true if `key` may be present in `filter`.
-    //
-    // The default implementation conservatively returns true (never filters a
-    // key out), which is always safe. Built-in filters (Bloom/Cuckoo/Ribbon)
-    // intentionally do not override this: their matching logic lives in free
-    // functions dispatched by FilterDispatch to avoid vtable overhead in the
-    // hot path. User-defined filters must override this to provide real
-    // matching.
-    virtual bool key_may_match(const Slice &key, const Slice &filter) const {
-        return true;
-    }
-};
 } // namespace anchordb

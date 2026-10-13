@@ -220,8 +220,8 @@ void put_varint_64(std::string *dst, uint64_t value) {
     dst->append(buf, ptr - buf);
 }
 
-// Encodes a Slice as: | varint32(size) | raw bytes |.
-void put_len_prefixed_slice(std::string *dst, const Slice &value) {
+// Encodes a std::string_view as: | varint32(size) | raw bytes |.
+void put_len_prefixed_slice(std::string *dst, std::string_view value) {
     put_varint_32(dst, value.size());
     dst->append(value.data(), value.size());
 }
@@ -363,35 +363,35 @@ const char *get_varint_64_ptr(const char *p, const char *limit,
     return get_varint_64_ptr_fallback(p, limit, value);
 }
 
-bool get_varint_32(Slice *input, uint32_t *value) {
+bool get_varint_32(std::string_view *input, uint32_t *value) {
     const char *p = input->data();
     const char *limit = p + input->size();
     const char *ptr = get_varint_32_ptr(p, limit, value);
     if (ptr == nullptr) {
         return false;
     }
-    *input = Slice(ptr, limit - ptr);
+    *input = std::string_view(ptr, limit - ptr);
     return true;
 }
 
-bool get_varint_64(Slice *input, uint64_t *value) {
+bool get_varint_64(std::string_view *input, uint64_t *value) {
     const char *p = input->data();
     const char *limit = p + input->size();
     const char *ptr = get_varint_64_ptr(p, limit, value);
     if (ptr == nullptr) {
         return false;
     }
-    *input = Slice(ptr, limit - ptr);
+    *input = std::string_view(ptr, limit - ptr);
     return true;
 }
 
 // Reads a length-prefixed slice from *input.  On success, *result holds the
 // slice data and *input is advanced past it.  Returns false if the input is
 // truncated (varint can't be decoded, or not enough bytes for the payload).
-bool get_len_prefixed_slice(Slice *input, Slice *result) {
+bool get_len_prefixed_slice(std::string_view *input, std::string_view *result) {
     uint32_t size;
     if (get_varint_32(input, &size) && input->size() >= size) {
-        *result = Slice(input->data(), size);
+        *result = std::string_view(input->data(), size);
         input->remove_prefix(size);
         return true;
     } else {

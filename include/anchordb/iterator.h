@@ -14,52 +14,58 @@
 
 #pragma once
 
-#include <anchordb/export.h>
-#include <anchordb/slice.h>
-#include <anchordb/status.h>
+#include "anchordb/export.h"
+#include "anchordb/status.h"
 
 namespace anchordb {
-class ANCHORDB_EXPORT Iterator {
-  public:
-    /// Constructs a new Iterator instance.
-    Iterator();
 
-    // Disallow copy construction and copy assignment.
+struct ANCHORDB_EXPORT Iterator {
+    void *state = nullptr;
+
+    bool (*valid)(const void *state) = nullptr;
+    void (*next)(void *state) = nullptr;
+    void (*prev)(void *state) = nullptr;
+    void (*seek)(void *state, std::string_view key) = nullptr;
+    void (*seek_to_first)(void *state) = nullptr;
+    void (*seek_to_last)(void *state) = nullptr;
+    std::string_view (*key)(const void *state) = nullptr;
+    std::string_view (*value)(const void *state) = nullptr;
+    Status (*status)(const void *state) = nullptr;
+
+    void (*destroy)(void *state) = nullptr;
+
+    Iterator() = default;
+
     Iterator(const Iterator &) = delete;
     Iterator &operator=(const Iterator &) = delete;
 
+    Iterator(Iterator &&other) noexcept { *this = std::move(other); }
+    Iterator &operator=(Iterator &&other) noexcept {
+        if (this != &other) {
+            state = other.state;
+            valid = other.valid;
+            next = other.next;
+            prev = other.prev;
+            seek = other.seek;
+            seek_to_first = other.seek_to_first;
+            seek_to_last = other.seek_to_last;
+            key = other.key;
+            value = other.value;
+            status = other.status;
+            destroy = other.destroy;
+
+            other.state = nullptr;
+            other.destroy = nullptr;
+        }
+        return *this;
+    }
+
     /// Destroys the Iterator, releasing any associated resources.
-    virtual ~Iterator();
-
-    /// Returns true if the iterator is positioned at a valid entry.
-    virtual bool valid() const = 0;
-
-    /// Advances the iterator to the next entry.
-    virtual void next() = 0;
-
-    /// Moves the iterator to the previous entry.
-    virtual void prev() = 0;
-
-    /// Positions the iterator at the first entry whose key is >= the given key.
-    virtual void seek(const Slice &key) = 0;
-
-    /// Positions the iterator at the first entry in the source.
-    virtual void seek_to_first() = 0;
-
-    /// Positions the iterator at the last entry in the source.
-    virtual void seek_to_last() = 0;
-
-    /// Returns the key of the entry at the current iterator position.
-    /// The caller must ensure that valid() returns true before calling this
-    /// method.
-    virtual Slice key() const = 0;
-
-    /// Returns the value of the entry at the current iterator position.
-    /// The caller must ensure that valid() returns true before calling this
-    /// method.
-    virtual Slice value() const = 0;
-
-    /// If an error has occurred, return it.  Else return an ok status.
-    virtual Status status() const = 0;
+    ~Iterator() {
+        if (destroy && state) {
+            destroy(state);
+        }
+    }
 };
+
 } // namespace anchordb

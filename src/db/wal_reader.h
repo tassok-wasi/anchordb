@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include "anchordb/slice.h"
 #include <string>
+
 namespace anchordb {
 
 class SequentialFileReader;
@@ -29,7 +29,7 @@ class WALReader {
 
     ~WALReader();
 
-    bool read_record(Slice *record, std::string *scratch);
+    bool read_record(std::string_view *record, std::string *scratch);
 
   private:
     SequentialFileReader *const reader_;

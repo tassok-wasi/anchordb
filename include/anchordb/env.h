@@ -20,7 +20,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
+
 namespace anchordb {
 
 class FileLock;
@@ -28,7 +30,6 @@ class Logger;
 class AlignedBuffer;
 class RandomAccessFileReader;
 class SequentialFileReader;
-class Slice;
 class WritableFileWriter;
 class Logger;
 
@@ -86,7 +87,7 @@ class ANCHORDB_EXPORT SequentialFileReader {
     SequentialFileReader(const SequentialFileReader &) = delete;
     SequentialFileReader &operator=(const SequentialFileReader &) = delete;
 
-    virtual Status read(size_t n, Slice *result, char *scratch) = 0;
+    virtual Status read(size_t n, std::string_view *result, char *scratch) = 0;
     virtual Status skip(uint64_t n) = 0;
 };
 
@@ -99,7 +100,7 @@ class ANCHORDB_EXPORT RandomAccessFileReader {
 
     virtual ~RandomAccessFileReader();
 
-    virtual Status read(uint64_t offset, size_t n, Slice *result,
+    virtual Status read(uint64_t offset, size_t n, std::string_view *result,
                         char *scratch) = 0;
 };
 
@@ -112,7 +113,7 @@ class ANCHORDB_EXPORT WritableFileWriter {
 
     virtual ~WritableFileWriter();
 
-    virtual Status append(const Slice &data) = 0;
+    virtual Status append(std::string_view data) = 0;
     virtual Status close() = 0;
     virtual Status flush() = 0;
     virtual Status sync() = 0;

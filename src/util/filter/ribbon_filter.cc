@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "anchordb/slice.h"
 #include "ribbon_filter.h"
 #include <algorithm>
 #include <bit>
@@ -20,17 +19,20 @@
 #include <cstdint>
 #include <limits>
 #include <string>
+#include <string_view>
 #include <vector>
 namespace anchordb {
 
-void RibbonFilter::create_filter(const Slice *keys, size_t n,
-                                 std::string *dst) const {
+void ribbon_create(const void *state_ptr, const std::string_view *keys,
+                   size_t n, std::string *dst) {
     if (n == 0)
         return;
 
+    auto *state = static_cast<const RibbonState *>(state_ptr);
+
     // Number of columns.  Must be strictly greater than the ribbon width so
     // that every key has a valid start column.
-    size_t num_bits = n * bits_per_key_;
+    size_t num_bits = n * state->bits_per_key;
     if (num_bits < k_ribbon_width + 1)
         num_bits = k_ribbon_width + 1;
     // Round up to a byte boundary so the serialized payload is whole bytes.
@@ -120,7 +122,8 @@ void RibbonFilter::create_filter(const Slice *keys, size_t n,
     }
 }
 
-bool ribbon_key_may_match(const Slice &key, const Slice &ribbon_filter) {
+bool ribbon_match(const void *state_ptr, const std::string_view &key,
+                  const std::string_view &ribbon_filter) {
     const size_t len = ribbon_filter.size();
     // Need at least 1 header byte + enough room for a ribbon.
     if (len <= k_ribbon_width + 1)

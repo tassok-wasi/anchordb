@@ -97,8 +97,8 @@ Status WinSequentialFileReader::submit_read_(void *dst, size_t len,
     return Status::ok();
 }
 
-Status WinSequentialFileReader::read(size_t n, Slice *result, char *scratch) {
-    *result = Slice();
+Status WinSequentialFileReader::read(size_t n, std::string_view *result, char *scratch) {
+    *result = std::string_view();
     if (n == 0)
         return Status::ok();
 
@@ -187,7 +187,7 @@ Status WinSequentialFileReader::read(size_t n, Slice *result, char *scratch) {
         }
     }
 
-    *result = Slice(scratch, total_copied);
+    *result = std::string_view(scratch, total_copied);
     return Status::ok();
 }
 
@@ -267,9 +267,9 @@ Status WinRandomAccessFileReader::submit_read_(HANDLE hFile, void *buf,
     return Status::ok();
 }
 
-Status WinRandomAccessFileReader::read(uint64_t offset, size_t n, Slice *result,
+Status WinRandomAccessFileReader::read(uint64_t offset, size_t n, std::string_viewstd::string_view *result,
                                        char *scratch) {
-    *result = Slice();
+    *result = std::string_view();
     HANDLE target_handle = INVALID_HANDLE_VALUE;
 
     if (has_permanent_handle_) {
@@ -344,7 +344,7 @@ Status WinRandomAccessFileReader::read(uint64_t offset, size_t n, Slice *result,
         uint64_t internal_offset = offset - read_offset;
 
         if (bytes_read <= internal_offset) {
-            *result = Slice(scratch, 0);
+            *result = std::string_view(scratch, 0);
             return Status::ok();
         }
 
@@ -355,9 +355,9 @@ Status WinRandomAccessFileReader::read(uint64_t offset, size_t n, Slice *result,
             std::memcpy(scratch, target_buf + internal_offset,
                         actual_payload_bytes);
         }
-        *result = Slice(scratch, actual_payload_bytes);
+        *result = std::string_view(scratch, actual_payload_bytes);
     } else {
-        *result = Slice(scratch, bytes_read);
+        *result = std::string_view(scratch, bytes_read);
     }
 
     return Status::ok();
@@ -414,7 +414,7 @@ Status WinWritableFileWriter::submit_write_(const char *src, size_t len,
     return Status::ok();
 }
 
-Status WinWritableFileWriter::append(const Slice &data) {
+Status WinWritableFileWriter::append(const std::string_view &data) {
     const char *src = data.data();
     size_t left = data.size();
 
@@ -560,7 +560,7 @@ std::string WinWritableFileWriter::dirname(const std::string &filename) {
     return filename.substr(0, separator_pos);
 }
 
-Slice WinWritableFileWriter::basename(const std::string &filename) {
+std::string_view WinWritableFileWriter::basename(const std::string &filename) {
     std::string::size_type separator_pos = filename.rfind('/');
     std::string::size_type backslash_pos = filename.rfind('\\');
     if (backslash_pos != std::string::npos &&
@@ -568,9 +568,9 @@ Slice WinWritableFileWriter::basename(const std::string &filename) {
         separator_pos = backslash_pos;
     }
     if (separator_pos == std::string::npos) {
-        return Slice(filename);
+        return std::string_view(filename);
     }
-    return Slice(filename.data() + separator_pos + 1,
+    return std::string_view(filename.data() + separator_pos + 1,
                  filename.length() - separator_pos - 1);
 }
 

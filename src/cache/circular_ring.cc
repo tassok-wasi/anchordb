@@ -37,7 +37,7 @@ CircularRing &CircularRing::operator=(CircularRing &&other) noexcept {
     return *this;
 }
 
-void CircularRing::push_back(const HashedKey &key, ClockProHandle *handle) {
+void CircularRing::push_back(HashedKey key, ClockProHandle *handle) {
     assert(handle != nullptr);
     if (contains(key))
         return;
@@ -90,7 +90,7 @@ void CircularRing::remove(ClockProHandle *handle) {
     size_--;
 }
 
-void CircularRing::remove(const HashedKey &key) {
+void CircularRing::remove(HashedKey key) {
     ClockProHandle *target = index_map_.get(key);
     assert(target != nullptr);
     remove(target);

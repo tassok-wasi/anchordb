@@ -14,8 +14,9 @@
 
 #pragma once
 
-#include "anchordb/slice.h"
 #include "anchordb/status.h"
+#include <string_view>
+
 namespace anchordb {
 
 class WritableFileWriter;
@@ -29,7 +30,7 @@ class WALWriter {
 
     ~WALWriter();
 
-    Status append(const Slice &data);
+    Status append(std::string_view data);
     Status flush();
 
   private:

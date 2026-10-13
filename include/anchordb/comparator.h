@@ -15,31 +15,18 @@
 #pragma once
 
 #include "anchordb/export.h"
+#include <string>
 
 namespace anchordb {
 
-class Slice;
-
-// Abstract interface for key ordering.  Implementations define a total order
-// over Slices, which is used by the memtable, SSTables, and the internal key
-// comparator to sort and search keys.
-//
-// Subclasses must implement compare() (returning negative, zero, or positive
-// as a < b, a == b, or a > b) and name() (returning a short, persistent
-// identifier for the comparator, used in SSTable metadata).
-class ANCHORDB_EXPORT Comparator {
-  public:
-    virtual ~Comparator();
-
-    // Compares two keys.  Returns:
-    //   < 0  if a < b
-    //   == 0 if a == b
-    //   > 0  if a > b
-    virtual int compare(const Slice &a, const Slice &b) const = 0;
-
-    // Returns a human-readable name for this comparator (e.g.
-    // "anchodb.BytewiseComparator"). The name is persisted in SSTable metadata
-    // so that the correct comparator can be used when reopening a database.
-    virtual const char *name() const = 0;
+struct ANCHORDB_EXPORT Comparator {
+    int (*compare)(std::string_view a, std::string_view b) = nullptr;
+    const char *(*name)() = nullptr;
+    void (*find_shortest_separator)(std::string *start,
+                                    std::string_view limit) = nullptr;
+    void (*find_short_successor)(std::string *key) = nullptr;
 };
+
+inline ANCHORDB_EXPORT const Comparator new_byte_wise_comparator();
+
 } // namespace anchordb

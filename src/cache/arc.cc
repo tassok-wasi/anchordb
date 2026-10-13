@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "arc.h"
+#include <string_view>
 
 namespace anchordb {
 
@@ -61,9 +62,10 @@ void ARCCache::replace(const HashedKey &key, bool in_b2) {
     }
 }
 
-Cache::Handle *
-ARCCache::insert(const Slice &key, uint64_t hash, void *value, size_t charge,
-                 void (*deleter)(const Slice &key, void *value)) {
+Cache::Handle *ARCCache::insert(std::string_view key, uint64_t hash,
+                                void *value, size_t charge,
+                                void (*deleter)(const std::string_view key,
+                                                void *value)) {
     mutex_.lock();
     HashedKey hkey{key, hash};
 
@@ -163,7 +165,7 @@ ARCCache::insert(const Slice &key, uint64_t hash, void *value, size_t charge,
     return reinterpret_cast<Cache::Handle *>(handle);
 }
 
-Cache::Handle *ARCCache::lookup(const Slice &key, uint64_t hash) {
+Cache::Handle *ARCCache::lookup(std::string_view key, uint64_t hash) {
     mutex_.lock();
     HashedKey hkey{key, hash};
     ARCHandle *e = std::visit(
@@ -184,7 +186,7 @@ void ARCCache::release(Cache::Handle *handle) {
     mutex_.unlock();
 }
 
-void ARCCache::erase(const Slice &key, uint64_t hash) {
+void ARCCache::erase(std::string_view key, uint64_t hash) {
     mutex_.lock();
     HashedKey hkey{key, hash};
     ARCHandle *e = std::visit(

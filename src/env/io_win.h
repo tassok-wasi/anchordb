@@ -15,7 +15,6 @@
 #pragma once
 
 #include "anchordb/env.h"
-#include "anchordb/slice.h"
 #include "anchordb/status.h"
 #include "util/aligned_buffer.h"
 #include <atomic>
@@ -24,9 +23,10 @@
 #include <mutex>
 #include <set>
 #include <string>
+#include <string_view>
 
 #ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
+    #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
 
@@ -92,7 +92,7 @@ class WinSequentialFileReader final : public SequentialFileReader {
         }
     }
 
-    Status read(size_t n, Slice *result, char *scratch) override;
+    Status read(size_t n, std::string_view *result, char *scratch) override;
     Status skip(uint64_t n) override;
 
   private:
@@ -127,7 +127,7 @@ class WinRandomAccessFileReader final : public RandomAccessFileReader {
         }
     }
 
-    Status read(uint64_t offset, size_t n, Slice *result,
+    Status read(uint64_t offset, size_t n, std::string_view *result,
                 char *scratch) override;
 
   private:
@@ -165,7 +165,7 @@ class WinWritableFileWriter final : public WritableFileWriter {
         }
     }
 
-    Status append(const Slice &data) override;
+    Status append(const std::string_view &data) override;
     Status flush() override { return flush_buffer(); }
     Status close() override;
     Status sync() override;
@@ -177,7 +177,7 @@ class WinWritableFileWriter final : public WritableFileWriter {
     Status sync_handle(HANDLE hFile, const std::string &file_path);
 
     std::string dirname(const std::string &filename);
-    Slice basename(const std::string &filename);
+    std::string_view basename(const std::string &filename);
 
     bool is_manifest(const std::string &filename) {
         return basename(filename).starts_with("MANIFEST");

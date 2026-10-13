@@ -37,13 +37,13 @@ template <typename T> class SwissMap {
 
     const char *name() const { return "anchordb.SwissMap"; }
 
-    bool contains(const HashedKey &key) const;
+    bool contains(HashedKey key) const;
 
-    T get(const HashedKey &key) const;
+    T get(const HashedKey key) const;
 
-    void insert(const HashedKey &key, T value);
+    void insert(HashedKey key, T value);
 
-    T remove(const HashedKey &key);
+    T remove(HashedKey key);
 
     // Resets the map to empty while preserving the current capacity.
     void clear() {
@@ -185,7 +185,7 @@ uint32_t SwissMap<T>::match_group_(const int8_t *group, int8_t h2,
 #endif
 }
 
-template <typename T> bool SwissMap<T>::contains(const HashedKey &key) const {
+template <typename T> bool SwissMap<T>::contains(HashedKey key) const {
     if (size_ == 0)
         return false;
 
@@ -219,7 +219,7 @@ template <typename T> bool SwissMap<T>::contains(const HashedKey &key) const {
     }
 }
 
-template <typename T> T SwissMap<T>::get(const HashedKey &key) const {
+template <typename T> T SwissMap<T>::get(HashedKey key) const {
     if (size_ == 0)
         return T();
 
@@ -253,7 +253,7 @@ template <typename T> T SwissMap<T>::get(const HashedKey &key) const {
     }
 }
 
-template <typename T> void SwissMap<T>::insert(const HashedKey &key, T value) {
+template <typename T> void SwissMap<T>::insert(HashedKey key, T value) {
     // Grow or purge tombstones once the combined (live + deleted) load would
     // exceed the maximum load factor.  Keeping this below 1 guarantees at
     // least one CTRL_EMPTY slot always exists, so probe sequences terminate.
@@ -322,7 +322,7 @@ template <typename T> void SwissMap<T>::insert(const HashedKey &key, T value) {
     ++size_;
 }
 
-template <typename T> T SwissMap<T>::remove(const HashedKey &key) {
+template <typename T> T SwissMap<T>::remove(HashedKey key) {
     if (size_ == 0)
         return T();
 

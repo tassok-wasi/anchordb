@@ -15,21 +15,22 @@
 #pragma once
 
 #include "anchordb/filter.h"
-#include "anchordb/slice.h"
 #include "util/hash.h"
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <string_view>
 namespace anchordb {
 
 // Shared constants so the free matching function can use them without
 // reaching into the class.
-inline constexpr size_t k_cuckoo_slots_per_bucket = 4;
-inline constexpr size_t k_cuckoo_fingerprint_bits = 8; // 1-byte fingerprint
+inline constexpr size_t kCuckooSlotsPerBucket = 4;
+inline constexpr size_t kCuckooFingerprintBits = 8; // 1-byte fingerprint
+static constexpr size_t kMaxReallocations = 500;
 
 namespace {
 
-inline uint32_t cuckoo_hash(const Slice &key) {
+inline uint32_t cuckoo_hash(std::string_view key) {
     return murmurhash2_32(key.data(), key.size(), 0xbd1e2a57);
 }
 
@@ -63,25 +64,19 @@ inline uint32_t cuckoo_rand(uint32_t &state) {
 
 } // namespace
 
-// Cuckoo filter with partial-key cuckoo hashing.
-//
-// Fingerprints are 1 byte (8 bits), giving a false-positive rate of ≈ 2⁻⁸.
-class CuckooFilter : public Filter {
-  public:
-    CuckooFilter() {}
+inline const char *cuckoo_name(const void *state_ptr) {
+    return "anchordb.BuiltinCuckooFilter";
+}
 
-    const char *name() const override { return "anchordb.BuiltinCuckooFilter"; }
+void cuckoo_create(const void *state_ptr, const std::string_view *keys,
+                   size_t n, std::string *dst);
 
-    FilterType get_type() const override { return FilterType::Cuckoo; }
+bool cuckoo_match(const void *state_ptr, std::string_view key,
+                  std::string_view cuckoo_filter);
 
-    void create_filter(const Slice *keys, size_t n,
-                       std::string *dst) const override;
-
-  private:
-    static constexpr size_t k_max_relocations = 500;
-};
-
-// Matching routine for serialized cuckoo filters.
-bool cuckoo_key_may_match(const Slice &key, const Slice &cuckoo_filter);
+inline Filter new_cuckoo_filter() {
+    return Filter{nullptr, &cuckoo_name, &cuckoo_create, &cuckoo_match,
+                  nullptr};
+}
 
 } // namespace anchordb

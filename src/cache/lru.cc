@@ -16,9 +16,10 @@
 
 namespace anchordb {
 
-Cache::Handle *
-LRUCache::insert(const Slice &key, uint64_t hash, void *value, size_t charge,
-                 void (*deleter)(const Slice &key, void *value)) {
+Cache::Handle *LRUCache::insert(std::string_view key, uint64_t hash,
+                                void *value, size_t charge,
+                                void (*deleter)(std::string_view key,
+                                                void *value)) {
     mutex_.lock();
     LRUHandle *e = reinterpret_cast<LRUHandle *>(
         malloc(sizeof(LRUHandle) - 1 + key.size()));
@@ -72,7 +73,7 @@ LRUCache::insert(const Slice &key, uint64_t hash, void *value, size_t charge,
     return reinterpret_cast<Cache::Handle *>(e);
 }
 
-Cache::Handle *LRUCache::lookup(const Slice &key, uint64_t hash) {
+Cache::Handle *LRUCache::lookup(std::string_view key, uint64_t hash) {
     mutex_.lock();
     LRUHandle *e = std::visit(
         [&](auto &active_map) { return active_map.get(HashedKey{key, hash}); },
@@ -90,7 +91,7 @@ void LRUCache::release(Cache::Handle *handle) {
     mutex_.unlock();
 }
 
-void LRUCache::erase(const Slice &key, uint64_t hash) {
+void LRUCache::erase(std::string_view key, uint64_t hash) {
     mutex_.lock();
     LRUHandle *e = std::visit(
         [&](auto &active_map) {

@@ -13,7 +13,6 @@
 // limitations under the License.
 
 #include "anchordb/env.h"
-#include "anchordb/slice.h"
 #include "anchordb/status.h"
 #include "db/wal_writer.h"
 #include "util/coding.h"
@@ -25,18 +24,18 @@ WALWriter::WALWriter(WritableFileWriter *dest) : dest_(dest) {}
 
 WALWriter::~WALWriter() = default;
 
-Status WALWriter::append(const Slice &slice) {
+Status WALWriter::append(std::string_view sv) {
     // 4 bytes crc, at most 5 bytes for varint32 length
     char buf[9];
 
-    uint32_t crc = value(slice.data(), slice.size());
+    uint32_t crc = value(sv.data(), sv.size());
     crc = mask(crc);
     encode_fixed_32(buf, crc);
-    char *ptr = encode_varint_32(buf + 4, slice.size());
+    char *ptr = encode_varint_32(buf + 4, sv.size());
 
-    Status s = dest_->append(Slice(buf, (ptr - buf)));
+    Status s = dest_->append(std::string_view(buf, (ptr - buf)));
     if (s.is_ok()) {
-        s = dest_->append(slice);
+        s = dest_->append(sv);
     }
     return s;
 }

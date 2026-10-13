@@ -29,11 +29,11 @@ template <typename T> class RobinHoodMap {
     }
 
     const char *name() const { return "anchordb.RobinHoodMap"; }
-    bool contains(const HashedKey &key) const;
-    T get(const HashedKey &key) const;
+    bool contains(HashedKey key) const;
+    T get(HashedKey key) const;
 
     // Inserts or updates an entry using its pre-computed hash.
-    void insert(const HashedKey &key, T value) {
+    void insert(HashedKey key, T value) {
         if (size_ >= capacity_ * kMaxLoadFactor) {
             resize_(capacity_ * 2);
         }
@@ -42,7 +42,7 @@ template <typename T> class RobinHoodMap {
     }
 
     // Erases a key and shifts back elements to prevent tombstones.
-    T remove(const HashedKey &key);
+    T remove(HashedKey key);
 
     void clear() {
         size_ = 0;
@@ -89,8 +89,7 @@ template <typename T> class RobinHoodMap {
     void resize_(size_t new_capacity);
 };
 
-template <typename T>
-bool RobinHoodMap<T>::contains(const HashedKey &key) const {
+template <typename T> bool RobinHoodMap<T>::contains(HashedKey key) const {
     if (size_ == 0)
         return false;
 
@@ -116,7 +115,7 @@ bool RobinHoodMap<T>::contains(const HashedKey &key) const {
     return false;
 }
 
-template <typename T> T RobinHoodMap<T>::get(const HashedKey &key) const {
+template <typename T> T RobinHoodMap<T>::get(HashedKey key) const {
     if (size_ == 0)
         return T();
 
@@ -172,7 +171,7 @@ template <typename T> void RobinHoodMap<T>::insert_(Bucket incoming) {
     }
 }
 
-template <typename T> T RobinHoodMap<T>::remove(const HashedKey &key) {
+template <typename T> T RobinHoodMap<T>::remove(HashedKey key) {
     if (size_ == 0)
         return T();
 

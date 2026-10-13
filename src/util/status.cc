@@ -13,7 +13,13 @@
 // limitations under the License.
 
 #include "anchordb/status.h"
+#include <cassert>
 #include <cstdint>
+#include <cstdio>
+#include <cstring>
+#include <string>
+#include <string_view>
+
 namespace anchordb {
 
 const char *Status::copy_state(const char *state) {
@@ -24,7 +30,7 @@ const char *Status::copy_state(const char *state) {
     return result;
 }
 
-Status::Status(Code code, const Slice &msg, const Slice &msg2) {
+Status::Status(Code code, std::string_view msg, std::string_view msg2) {
     assert(code != Code::Ok);
     const uint32_t len1 = static_cast<uint32_t>(msg.size());
     const uint32_t len2 = static_cast<uint32_t>(msg2.size());
@@ -41,7 +47,7 @@ Status::Status(Code code, const Slice &msg, const Slice &msg2) {
     state_ = result;
 }
 
-std::string Status::str() const {
+std::string Status::to_str() const {
     if (state_ == nullptr) {
         return "OK";
     } else {

@@ -16,9 +16,9 @@
 
 namespace anchordb {
 
-Cache::Handle *ClockProCache::insert(const Slice &key, uint64_t hash,
+Cache::Handle *ClockProCache::insert(std::string_view key, uint64_t hash,
                                      void *value, size_t charge,
-                                     void (*deleter)(const Slice &key,
+                                     void (*deleter)(std::string_view key,
                                                      void *value)) {
     mutex_.lock();
 
@@ -93,7 +93,7 @@ Cache::Handle *ClockProCache::insert(const Slice &key, uint64_t hash,
     return reinterpret_cast<Cache::Handle *>(e);
 }
 
-Cache::Handle *ClockProCache::lookup(const Slice &key, uint64_t hash) {
+Cache::Handle *ClockProCache::lookup(std::string_view key, uint64_t hash) {
     mutex_.lock();
     ClockProHandle *e = std::visit(
         [&](auto &active_map) { return active_map.get(HashedKey{key, hash}); },
@@ -116,7 +116,7 @@ void ClockProCache::release(Cache::Handle *handle) {
     mutex_.unlock();
 }
 
-void ClockProCache::erase(const Slice &key, uint64_t hash) {
+void ClockProCache::erase(std::string_view key, uint64_t hash) {
     mutex_.lock();
     ClockProHandle *e = std::visit(
         [&](auto &active_map) {

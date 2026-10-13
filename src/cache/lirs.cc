@@ -16,9 +16,10 @@
 
 namespace anchordb {
 
-Cache::Handle *
-LIRSCache::insert(const Slice &key, uint64_t hash, void *value, size_t charge,
-                  void (*deleter)(const Slice &key, void *value)) {
+Cache::Handle *LIRSCache::insert(std::string_view key, uint64_t hash,
+                                 void *value, size_t charge,
+                                 void (*deleter)(std::string_view key,
+                                                 void *value)) {
     mutex_.lock();
 
     // Check if key already exists in cache/history
@@ -150,7 +151,7 @@ LIRSCache::insert(const Slice &key, uint64_t hash, void *value, size_t charge,
     return reinterpret_cast<Cache::Handle *>(e);
 }
 
-Cache::Handle *LIRSCache::lookup(const Slice &key, uint64_t hash) {
+Cache::Handle *LIRSCache::lookup(std::string_view key, uint64_t hash) {
     mutex_.lock();
     LIRSHandle *e = std::visit(
         [&](auto &active_map) { return active_map.get(HashedKey{key, hash}); },
@@ -224,7 +225,7 @@ void LIRSCache::release(Cache::Handle *handle) {
     mutex_.unlock();
 }
 
-void LIRSCache::erase(const Slice &key, uint64_t hash) {
+void LIRSCache::erase(std::string_view key, uint64_t hash) {
     mutex_.lock();
     LIRSHandle *e = std::visit(
         [&](auto &active_map) {

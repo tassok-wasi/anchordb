@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "anchordb/slice.h"
 #include "db_format.h"
 #include "util/coding.h"
 #include <cassert>
@@ -25,7 +24,8 @@ namespace anchordb {
 // Decodes the trailing 8 bytes of an internal key into sequence number and
 // value type. Layout: | user_key (n-8 bytes) | sequence (7 bytes, big-endian) |
 // type (1 byte) |
-bool parse_internal_key(const Slice &internal_key, ParsedInternalKey *result) {
+bool parse_internal_key(std::string_view internal_key,
+                        ParsedInternalKey *result) {
     const size_t n = internal_key.size();
     if (n < 8)
         return false;
@@ -34,14 +34,14 @@ bool parse_internal_key(const Slice &internal_key, ParsedInternalKey *result) {
     uint8_t c = num & 0xff;
     result->sequence = num >> 8;
     result->type = static_cast<ValueType>(c);
-    result->user_key = Slice(internal_key.data(), n - 8);
+    result->user_key = std::string_view(internal_key.data(), n - 8);
     return (c <= static_cast<uint8_t>(ValueType::value));
 }
 
 // Constructs a memtable lookup key.  The wire format is:
 //   | varint32(internal_key_size) | user_key | packed(seq, TypeValue) |
 // The varint32 length prefix is required by the memtable's internal encoding.
-LookUpKey::LookUpKey(const Slice &user_key, seq_num seq) {
+LookUpKey::LookUpKey(std::string_view user_key, seq_num seq) {
     size_t usize = user_key.size();
     size_t needed = usize + 13;
     char *dst;

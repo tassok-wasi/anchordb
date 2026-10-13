@@ -13,20 +13,20 @@
 // limitations under the License.
 
 #include "anchordb/env.h"
-#include "anchordb/slice.h"
 #include "anchordb/status.h"
 #include "db/wal_reader.h"
 #include "util/coding.h"
 #include "util/crc32.h"
 #include <cstdint>
+
 namespace anchordb {
 
 WALReader::WALReader(SequentialFileReader *reader) : reader_(reader) {}
 
-bool WALReader::read_record(Slice *record, std::string *scratch) {
+bool WALReader::read_record(std::string_view *record, std::string *scratch) {
     // Read the 4-byte masked CRC
     char crc_buf[4];
-    Slice crc_slice;
+    std::string_view crc_slice;
     Status s = reader_->read(4, &crc_slice, crc_buf);
     if (!s.is_ok() || crc_slice.size() < 4) {
         return false; // Clean EOF or truncated header
@@ -38,7 +38,7 @@ bool WALReader::read_record(Slice *record, std::string *scratch) {
     uint32_t length = 0;
     int shift = 0;
     for (int i = 0; i < 5; ++i) {
-        Slice byte_slice;
+        std::string_view byte_slice;
         char b;
         s = reader_->read(1, &byte_slice, &b);
         if (!s.is_ok() || byte_slice.empty()) {
@@ -54,7 +54,7 @@ bool WALReader::read_record(Slice *record, std::string *scratch) {
 
     // Read the exact payload into scratch
     scratch->resize(length);
-    Slice payload_slice;
+    std::string_view payload_slice;
     s = reader_->read(length, &payload_slice, &(*scratch)[0]);
     if (!s.is_ok() || payload_slice.size() != length) {
         return false; // Truncated payload (crash cutoff)

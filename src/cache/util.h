@@ -14,9 +14,9 @@
 
 #pragma once
 
-#include "anchordb/slice.h"
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 
 namespace anchordb {
 
@@ -24,13 +24,13 @@ const int kNumShardBits = 4;
 const int kNumShards = 1 << kNumShardBits;
 
 struct HashedKey {
-    Slice key;
+    std::string_view key;
     uint64_t hash;
 };
 
 struct LRUHandle {
     void *value;
-    void (*deleter)(const Slice &, void *value);
+    void (*deleter)(const std::string_view, void *value);
 
     uint32_t refs;
     bool in_cache; // True if referenced in map / retrievable
@@ -40,12 +40,12 @@ struct LRUHandle {
     size_t key_len;
     char key_data[1];
 
-    Slice key() const { return Slice(key_data, key_len); }
+    std::string_view key() const { return std::string_view(key_data, key_len); }
 };
 
 struct LIRSHandle {
     void *value;
-    void (*deleter)(const Slice &, void *value);
+    void (*deleter)(std::string_view, void *value);
 
     uint32_t refs;
     bool in_cache;    // True if referenced in map / retrievable
@@ -60,7 +60,7 @@ struct LIRSHandle {
     size_t key_len;
     char key_data[1];
 
-    Slice key() const { return Slice(key_data, key_len); }
+    std::string_view key() const { return std::string_view(key_data, key_len); }
 };
 
 struct ClockProHandle {
@@ -68,7 +68,7 @@ struct ClockProHandle {
     ClockProHandle *next{nullptr};
 
     void *value{nullptr};
-    void (*deleter)(const Slice &, void *value){nullptr};
+    void (*deleter)(const std::string_view, void *value){nullptr};
 
     uint32_t refs{0};
     bool in_cache{false};    // True if indexed in hash map
@@ -82,12 +82,12 @@ struct ClockProHandle {
     size_t key_len{0};
     char key_data[1];
 
-    Slice key() const { return Slice(key_data, key_len); }
+    std::string_view key() const { return std::string_view(key_data, key_len); }
 };
 
 struct ARCHandle {
     void *value;
-    void (*deleter)(const Slice &, void *value);
+    void (*deleter)(const std::string_view, void *value);
 
     uint32_t refs;
     bool in_cache; // true = in T1/T2 with value loaded; false = ghost entry
@@ -102,7 +102,7 @@ struct ARCHandle {
     size_t key_len;
     char key_data[1];
 
-    Slice key() const { return Slice(key_data, key_len); }
+    std::string_view key() const { return std::string_view(key_data, key_len); }
 };
 
 } // namespace anchordb

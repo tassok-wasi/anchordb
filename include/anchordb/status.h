@@ -15,7 +15,7 @@
 #pragma once
 
 #include <anchordb/export.h>
-#include <anchordb/slice.h>
+#include <string_view>
 
 namespace anchordb {
 class ANCHORDB_EXPORT Status {
@@ -47,20 +47,24 @@ class ANCHORDB_EXPORT Status {
     static Status ok() { return Status(); }
 
     // Return error status of an appropriate type.
-    static Status not_found(const Slice &msg, const Slice &msg2 = Slice()) {
+    static Status not_found(std::string_view msg,
+                            std::string_view msg2 = std::string_view()) {
         return Status(Code::NotFound, msg, msg2);
     }
-    static Status corruption(const Slice &msg, const Slice &msg2 = Slice()) {
+    static Status corruption(std::string_view msg,
+                             std::string_view msg2 = std::string_view()) {
         return Status(Code::Corruption, msg, msg2);
     }
-    static Status not_supported(const Slice &msg, const Slice &msg2 = Slice()) {
+    static Status not_supported(std::string_view msg,
+                                std::string_view msg2 = std::string_view()) {
         return Status(Code::NotSupported, msg, msg2);
     }
-    static Status invalid_argument(const Slice &msg,
-                                   const Slice &msg2 = Slice()) {
+    static Status invalid_argument(std::string_view msg,
+                                   std::string_view msg2 = std::string_view()) {
         return Status(Code::InvalidArgument, msg, msg2);
     }
-    static Status io_error(const Slice &msg, const Slice &msg2 = Slice()) {
+    static Status io_error(std::string_view msg,
+                           std::string_view msg2 = std::string_view()) {
         return Status(Code::IoError, msg, msg2);
     }
 
@@ -84,7 +88,7 @@ class ANCHORDB_EXPORT Status {
 
     // Return a string representation of this status suitable for printing.
     // Returns the string "OK" for success.
-    std::string str() const;
+    std::string to_str() const;
 
   private:
     enum class Code {
@@ -100,7 +104,7 @@ class ANCHORDB_EXPORT Status {
         return (state_ == nullptr) ? Code::Ok : static_cast<Code>(state_[4]);
     }
 
-    Status(Code code, const Slice &msg, const Slice &msg2);
+    Status(Code code, std::string_view msg, std::string_view msg2);
     static const char *copy_state(const char *s);
 
     // OK status has a null state_.  Otherwise, state_ is a new[] array

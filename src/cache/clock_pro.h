@@ -16,7 +16,6 @@
 
 #include "anchordb/cache.h"
 #include "anchordb/options.h"
-#include "anchordb/slice.h"
 #include "cache/circular_ring.h"
 #include "cache/linear_prob_map.h"
 #include "cache/robinhood_map.h"
@@ -29,6 +28,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
+#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -108,12 +108,12 @@ class ClockProCache {
         cold_capacity_ = capacity_;
     }
 
-    Cache::Handle *insert(const Slice &key, uint64_t hash, void *value,
+    Cache::Handle *insert(std::string_view key, uint64_t hash, void *value,
                           size_t charge,
-                          void (*deleter)(const Slice &key, void *value));
-    Cache::Handle *lookup(const Slice &key, uint64_t hash);
+                          void (*deleter)(std::string_view key, void *value));
+    Cache::Handle *lookup(std::string_view key, uint64_t hash);
     void release(Cache::Handle *handle);
-    void erase(const Slice &key, uint64_t hash);
+    void erase(std::string_view key, uint64_t hash);
     void prune();
     size_t total_charge() const {
         mutex_.lock();
@@ -163,13 +163,14 @@ class ShardedClockProCache : public Cache {
 
     ~ShardedClockProCache() override {};
 
-    Handle *insert(const Slice &key, void *value, size_t charge,
-                   void (*deleter)(const Slice &key, void *value)) override {
+    Handle *insert(std::string_view key, void *value, size_t charge,
+                   void (*deleter)(std::string_view key,
+                                   void *value)) override {
         const uint64_t hash = hash_slice(key);
         return shard_[shard(hash)].insert(key, hash, value, charge, deleter);
     }
 
-    Handle *lookup(const Slice &key) override {
+    Handle *lookup(std::string_view key) override {
         const uint64_t hash = hash_slice(key);
         return shard_[shard(hash)].lookup(key, hash);
     }
@@ -179,7 +180,7 @@ class ShardedClockProCache : public Cache {
         shard_[shard(h->hash)].release(handle);
     }
 
-    void erase(const Slice &key) override {
+    void erase(std::string_view key) override {
         const uint64_t hash = hash_slice(key);
         shard_[shard(hash)].erase(key, hash);
     }
@@ -215,7 +216,9 @@ class ShardedClockProCache : public Cache {
     std::mutex id_mutex_;
     uint64_t last_id_;
 
-    static inline uint64_t hash_slice(const Slice &s) { return xx_hash64(s); }
+    static inline uint64_t hash_slice(std::string_view s) {
+        return xx_hash64(s);
+    }
 
     static uint64_t shard(uint64_t hash) {
         return hash >> (64 - kNumShardBits);

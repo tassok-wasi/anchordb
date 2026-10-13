@@ -14,9 +14,10 @@
 
 #pragma once
 
-#include <anchordb/slice.h>
 #include <cstdint>
 #include <string>
+#include <string_view>
+
 namespace anchordb {
 
 // Writes a 32-bit unsigned integer to dst in little-endian byte order.
@@ -69,19 +70,19 @@ const char *get_varint_32_ptr(const char *p, const char *limit,
 const char *get_varint_64_ptr(const char *p, const char *limit,
                               uint64_t *value);
 
-// Decodes a varint from the front of *input, advancing the Slice past the
-// consumed bytes.  Returns false if the varint is truncated.
-bool get_varint_32(Slice *input, uint32_t *value);
-bool get_varint_64(Slice *input, uint64_t *value);
+// Decodes a varint from the front of *input, advancing the std::string_view
+// past the consumed bytes.  Returns false if the varint is truncated.
+bool get_varint_32(std::string_view *input, uint32_t *value);
+bool get_varint_64(std::string_view *input, uint64_t *value);
 
 // Length-prefixed slice encoding
-// Encodes a Slice as: | varint32(size) | raw bytes |.
+// Encodes a std::string_view as: | varint32(size) | raw bytes |.
 // This is the standard way to embed variable-length data in a binary record.
 
 // Appends a length-prefixed slice to *dst.
-void put_len_prefixed_slice(std::string *dst, const Slice &value);
+void put_len_prefixed_slice(std::string *dst, std::string_view value);
 // Reads a length-prefixed slice from the front of *input, advancing past it.
 // Returns false if the input is truncated.
-bool get_len_prefixed_slice(Slice *input, Slice *result);
+bool get_len_prefixed_slice(std::string_view *input, std::string_view *result);
 
 } // namespace anchordb

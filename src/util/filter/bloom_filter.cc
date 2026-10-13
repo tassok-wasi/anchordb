@@ -15,12 +15,14 @@
 #include "bloom_filter.h"
 namespace anchordb {
 
-void BloomFilter::create_filter(const Slice *keys, size_t n,
-                                std::string *dst) const {
+void bloom_create(const void *state_ptr, const std::string_view *keys, size_t n,
+                  std::string *dst) {
     if (n == 0)
         return;
 
-    size_t bits = n * bits_per_key_;
+    auto *state = static_cast<const BloomFilterState *>(state_ptr);
+
+    size_t bits = n * state->bits_per_key;
     if (bits < 64)
         bits = 64;
 
@@ -31,12 +33,12 @@ void BloomFilter::create_filter(const Slice *keys, size_t n,
     const size_t init_size = dst->size();
     dst->resize(init_size + bytes + 1, 0);
     char *array = &(*dst)[init_size];
-    array[bytes] = static_cast<char>(k_); // store k in the trailing byte
+    array[bytes] = static_cast<char>(state->k); // store k in the trailing byte
 
     for (size_t i = 0; i < n; i++) {
         uint32_t h = bloom_hash(keys[i]);
         const uint32_t delta = (h >> 17) | (h << 15); // double-hashing
-        for (size_t j = 0; j < k_; j++) {
+        for (size_t j = 0; j < state->k; j++) {
             const size_t bitpos = h % bits;
             array[bitpos >> 3] |= static_cast<char>(1 << (bitpos & 7));
             h += delta;
@@ -44,7 +46,8 @@ void BloomFilter::create_filter(const Slice *keys, size_t n,
     }
 }
 
-bool bloom_key_may_match(const Slice &key, const Slice &bloom_filter) {
+bool bloom_match(const void *state_ptr, std::string_view key,
+                 std::string_view bloom_filter) {
     const size_t len = bloom_filter.size();
     if (len < 2)
         return false;

@@ -32,10 +32,10 @@ template <typename T> class LinearProbingMap {
 
     const char *name() const { return "anchordb.LinearProbingMap"; }
 
-    bool contains(const HashedKey &key) const;
-    T get(const HashedKey &key) const;
-    void insert(const HashedKey &key, T value);
-    T remove(const HashedKey &key);
+    bool contains(HashedKey key) const;
+    T get(HashedKey key) const;
+    void insert(HashedKey key, T value);
+    T remove(HashedKey key);
 
     void clear() {
         size_ = 0;
@@ -78,8 +78,7 @@ template <typename T> class LinearProbingMap {
     void resize_(size_t new_capacity);
 };
 
-template <typename T>
-bool LinearProbingMap<T>::contains(const HashedKey &key) const {
+template <typename T> bool LinearProbingMap<T>::contains(HashedKey key) const {
     if (size_ == 0)
         return false;
 
@@ -96,7 +95,7 @@ bool LinearProbingMap<T>::contains(const HashedKey &key) const {
     return false;
 }
 
-template <typename T> T LinearProbingMap<T>::get(const HashedKey &key) const {
+template <typename T> T LinearProbingMap<T>::get(HashedKey key) const {
     if (size_ == 0) {
         return T();
     }
@@ -114,8 +113,7 @@ template <typename T> T LinearProbingMap<T>::get(const HashedKey &key) const {
     return T();
 }
 
-template <typename T>
-void LinearProbingMap<T>::insert(const HashedKey &key, T value) {
+template <typename T> void LinearProbingMap<T>::insert(HashedKey key, T value) {
     if (size_ >= capacity_ * kMaxLoadFactor) {
         resize_(capacity_ * 2);
     }
@@ -137,7 +135,7 @@ void LinearProbingMap<T>::insert(const HashedKey &key, T value) {
     size_++;
 }
 
-template <typename T> T LinearProbingMap<T>::remove(const HashedKey &key) {
+template <typename T> T LinearProbingMap<T>::remove(HashedKey key) {
     if (size_ == 0)
         return T();
 

@@ -14,14 +14,15 @@
 
 #pragma once
 
-#include "anchordb/slice.h"
+#include "anchordb/comparator.h"
 #include "util/coding.h"
-#include "util/comparator.h"
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <string>
+#include <string_view>
+
 namespace anchordb {
 
 // Distinguishes a live key-value entry from a tombstone (deletion marker).
@@ -42,12 +43,12 @@ static const seq_num k_max_seq_num = ((0x1ul << 56) - 1);
 //   | user_key (variable) | sequence (7 bytes) | type (1 byte) |
 // for a total of user_key.size() + 8 bytes.
 struct ParsedInternalKey {
-    Slice user_key;
+    std::string_view user_key;
     seq_num sequence;
     ValueType type;
 
     ParsedInternalKey() {}
-    ParsedInternalKey(const Slice &u, const seq_num seq, ValueType t)
+    ParsedInternalKey(const std::string_view u, const seq_num seq, ValueType t)
         : user_key(u), sequence(seq), type(t) {}
 };
 
@@ -73,14 +74,15 @@ inline void append_internal_key(std::string *result,
     put_fixed_64(result, pack_seq_and_type(key.sequence, key.type));
 }
 
-// Decodes an internal key from a Slice.  Returns false if the slice is too
-// short or the ValueType byte is invalid.
-bool parse_internal_key(const Slice &internal_key, ParsedInternalKey *result);
+// Decodes an internal key from a std::string_view.  Returns false if the
+// std::string_view is too short or the ValueType byte is invalid.
+bool parse_internal_key(std::string_view internal_key,
+                        ParsedInternalKey *result);
 
 // Strips the trailing 8 bytes (seq+type) and returns only the user_key portion.
-inline Slice extract_user_key(const Slice &internal_key) {
+inline std::string_view extract_user_key(std::string_view internal_key) {
     assert(internal_key.size() >= 8);
-    return Slice(internal_key.data(), internal_key.size() - 8);
+    return std::string_view(internal_key.data(), internal_key.size() - 8);
 }
 
 // An owned, encoded internal key.  Wraps a std::string that holds the full
@@ -92,23 +94,26 @@ class InternalKey {
 
   public:
     InternalKey() {}
-    InternalKey(const Slice &user_key, seq_num s, ValueType t) {
+    InternalKey(std::string_view user_key, seq_num s, ValueType t) {
         append_internal_key(&key_, ParsedInternalKey(user_key, s, t));
     }
 
     // Copies the raw bytes from s into the internal buffer.
-    bool decode_from(const Slice &s) {
+    bool decode_from(std::string_view s) {
         key_.assign(s.data(), s.size());
         return !key_.empty();
     }
 
-    // Returns the encoded internal key as a Slice.  Must not be empty.
-    Slice encode() const {
+    // Returns the encoded internal key as a std::string_view.  Must not be
+    // empty.
+    std::string_view encode() const {
         assert(!key_.empty());
-        return Slice(key_);
+        return std::string_view(key_);
     }
 
-    Slice user_key() const { return extract_user_key(Slice(key_)); }
+    std::string_view user_key() const {
+        return extract_user_key(std::string_view(key_));
+    }
 
     void set_from(const ParsedInternalKey &p) {
         key_.clear();
@@ -127,7 +132,7 @@ class LookUpKey {
   public:
     // Constructs a memtable key for the given user_key and sequence number.
     // The value type is always TypeValue (used for point lookups).
-    LookUpKey(const Slice &user_key, seq_num sequence);
+    LookUpKey(std::string_view user_key, seq_num sequence);
 
     LookUpKey(const LookUpKey &) = delete;
     LookUpKey &operator=(const LookUpKey &) = delete;
@@ -138,11 +143,17 @@ class LookUpKey {
     }
 
     // Returns the full memtable key including the varint32 length prefix.
-    Slice memtable_key() const { return Slice(start_, end_ - start_); }
+    std::string_view memtable_key() const {
+        return std::string_view(start_, end_ - start_);
+    }
     // Returns the internal key portion (user_key + 8-byte trailer).
-    Slice internal_key() const { return Slice(kstart_, end_ - kstart_); }
+    std::string_view internal_key() const {
+        return std::string_view(kstart_, end_ - kstart_);
+    }
     // Returns just the user_key portion.
-    Slice user_key() const { return Slice(kstart_, end_ - kstart_ - 8); }
+    std::string_view user_key() const {
+        return std::string_view(kstart_, end_ - kstart_ - 8);
+    }
 
   private:
     const char *start_;  // beginning of the memtable key (varint32 prefix)
@@ -155,14 +166,12 @@ class LookUpKey {
 // user-supplied comparator), then by sequence number (descending) so that
 // newer versions of the same user_key appear first.  This is the ordering
 // used by the memtable and SSTables.
-template <typename UserComparator = ByteWiseComparator>
 class InternalKeyComparator {
   public:
-    explicit InternalKeyComparator(const UserComparator *c)
-        : user_comparator_(c) {}
+    explicit InternalKeyComparator(const Comparator *c) : user_comparator_(c) {}
     const char *name() const { return "anchordb.InternalKeyComparator"; }
 
-    int compare(const Slice &a, const Slice &b) const {
+    int compare(std::string_view a, std::string_view b) const {
         int r =
             user_comparator_->compare(extract_user_key(a), extract_user_key(b));
         if (r == 0) {
@@ -177,16 +186,16 @@ class InternalKeyComparator {
         return r;
     }
 
-    const UserComparator *user_comparator() const { return user_comparator_; }
+    const Comparator *user_comparator() const { return user_comparator_; }
 
     int compare(const InternalKey &a, const InternalKey &b) const {
         return compare(a.encode(), b.encode());
     }
 
-    void find_shortest_separator(std::string *start, const Slice &limit) {
+    void find_shortest_separator(std::string *start, std::string_view limit) {
         // Attempt to shorten the user portion of the key
-        Slice user_start = extract_user_key(*start);
-        Slice user_limit = extract_user_key(limit);
+        std::string_view user_start = extract_user_key(*start);
+        std::string_view user_limit = extract_user_key(limit);
         std::string tmp(user_start.data(), user_start.size());
         user_comparator_->find_shortest_separator(&tmp, user_limit);
         if (tmp.size() < user_start.size() &&
@@ -201,7 +210,7 @@ class InternalKeyComparator {
         }
     }
     void find_short_successor(std::string *key) const {
-        Slice user_key = extract_user_key(*key);
+        std::string_view user_key = extract_user_key(*key);
         std::string tmp(user_key.data(), user_key.size());
         user_comparator_->find_short_successor(&tmp);
         if (tmp.size() < user_key.size() &&
@@ -216,7 +225,7 @@ class InternalKeyComparator {
     }
 
   private:
-    const UserComparator *user_comparator_;
+    const Comparator *user_comparator_;
 };
 
 struct BlobHandle {
@@ -235,7 +244,8 @@ inline void encode_blob_handle(BlobHandle *handle, std::string *result) {
     put_varint_32(result, handle->size);
 }
 
-inline bool parse_blob_handle(Slice *blob_handle, BlobHandle *result) {
+inline bool parse_blob_handle(std::string_view *blob_handle,
+                              BlobHandle *result) {
     return get_varint_64(blob_handle, &result->offset) &&
            get_varint_32(blob_handle, &result->file_id) &&
            get_varint_32(blob_handle, &result->size);

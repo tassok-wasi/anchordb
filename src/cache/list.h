@@ -34,11 +34,9 @@ template <typename T> class List {
     bool is_empty() const { return head_ == nullptr; }
     size_t size() const { return size_; }
 
-    bool contains(const HashedKey &key) const {
-        return index_map_.contains(key);
-    }
+    bool contains(HashedKey key) const { return index_map_.contains(key); }
 
-    T get(const HashedKey &key) const {
+    T get(HashedKey key) const {
         Node *node = index_map_.get(key);
         if (node == nullptr) {
             return T();
@@ -47,16 +45,14 @@ template <typename T> class List {
         return node->data;
     }
 
-    void push_front(const HashedKey &key, T data);
-    void push_back(const HashedKey &key, T data);
+    void push_front(HashedKey key, T data);
+    void push_back(HashedKey key, T data);
 
-    void insert_before(const HashedKey &tr_key, const HashedKey &new_key,
-                       T data);
-    void insert_after(const HashedKey &tr_key, const HashedKey &new_key,
-                      T data);
+    void insert_before(HashedKey tr_key, HashedKey new_key, T data);
+    void insert_after(HashedKey tr_key, HashedKey new_key, T data);
 
-    void move_to_front(const HashedKey &key);
-    void move_to_back(const HashedKey &key);
+    void move_to_front(HashedKey key);
+    void move_to_back(HashedKey key);
 
     void pop_front() {
         assert(head_ != nullptr);
@@ -68,7 +64,7 @@ template <typename T> class List {
         remove_(tail_);
     }
 
-    void remove(const HashedKey &key) {
+    void remove(HashedKey key) {
         Node *target_node = index_map_.get(key);
         assert(target_node != nullptr);
 
@@ -156,7 +152,7 @@ template <typename T> List<T> &List<T>::operator=(List &&other) noexcept {
     return *this;
 }
 
-template <typename T> void List<T>::push_front(const HashedKey &key, T data) {
+template <typename T> void List<T>::push_front(HashedKey key, T data) {
     if (contains(key))
         return;
 
@@ -170,7 +166,7 @@ template <typename T> void List<T>::push_front(const HashedKey &key, T data) {
     index_map_.insert(key, new_node);
 }
 
-template <typename T> void List<T>::push_back(const HashedKey &key, T data) {
+template <typename T> void List<T>::push_back(HashedKey key, T data) {
     if (contains(key))
         return;
 
@@ -185,8 +181,7 @@ template <typename T> void List<T>::push_back(const HashedKey &key, T data) {
 }
 
 template <typename T>
-void List<T>::insert_before(const HashedKey &tr_key, const HashedKey &new_key,
-                            T data) {
+void List<T>::insert_before(HashedKey tr_key, HashedKey new_key, T data) {
     if (contains(new_key))
         return;
 
@@ -201,8 +196,7 @@ void List<T>::insert_before(const HashedKey &tr_key, const HashedKey &new_key,
 }
 
 template <typename T>
-void List<T>::insert_after(const HashedKey &tr_key, const HashedKey &new_key,
-                           T data) {
+void List<T>::insert_after(HashedKey tr_key, HashedKey new_key, T data) {
     if (contains(new_key))
         return;
 
@@ -216,7 +210,7 @@ void List<T>::insert_after(const HashedKey &tr_key, const HashedKey &new_key,
     index_map_.insert(new_key, new_node);
 }
 
-template <typename T> void List<T>::move_to_front(const HashedKey &key) {
+template <typename T> void List<T>::move_to_front(HashedKey key) {
     Node *target_node = index_map_.get(key);
     assert(target_node != nullptr);
 
@@ -227,7 +221,7 @@ template <typename T> void List<T>::move_to_front(const HashedKey &key) {
     link_before_(head_, target_node);
 }
 
-template <typename T> void List<T>::move_to_back(const HashedKey &key) {
+template <typename T> void List<T>::move_to_back(HashedKey key) {
     Node *target_node = index_map_.get(key);
     assert(target_node != nullptr);
 

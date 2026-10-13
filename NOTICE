@@ -1,0 +1,13 @@
+AnchorDB
+Copyright 2026 Tassok Imam Wasi
+
+This product features an independent, modernized architecture heavily inspired by
+the design paradigms, wire formats, and public interfaces of Google's LevelDB
+(https://github.com/google/leveldb).
+
+All core components—including data serialization, filter pipelines, and environment
+abstractions—have been implemented from scratch under the Apache License 2.0.
+Where structural layouts or standard utility interfaces (such as Slice and Status designs)
+parallel LevelDB for compatibility and architectural consistency, the underlying logic
+has been entirely rewritten to leverage modern performance patterns (e.g., hardware
+intrinsics, optimized loop unrolling, and devirtualized filter execution).

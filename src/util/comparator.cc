@@ -12,23 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/comparator.h"
+#include "anchordb/comparator.h"
 #include <algorithm>
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 
 namespace anchordb {
 
-const char *ByteWiseComparator::name() const {
-    return "anchordb.ByteWiseComparator";
-}
-
-int ByteWiseComparator::compare(const Slice &a, const Slice &b) const {
+namespace {
+int byte_wise_compare(std::string_view a, std::string_view b) {
     return a.compare(b);
 }
 
-void ByteWiseComparator::find_shortest_separator(std::string *start,
-                                                 const Slice &limit) {
+const char *byte_wise_name() { return "anchordb.ByteWiseComparator"; }
+
+void byte_wise_find_shortest_separator(std::string *start,
+                                       std::string_view limit) {
     size_t min_len = std::min(start->size(), limit.size());
     size_t diff_index = 0;
     while (diff_index < min_len && (*start)[diff_index] == limit[diff_index]) {
@@ -43,12 +44,12 @@ void ByteWiseComparator::find_shortest_separator(std::string *start,
             diff_byte + 1 < static_cast<uint8_t>(limit[diff_index])) {
             (*start)[diff_index]++;
             start->resize(diff_index + 1);
-            assert(compare(*start, limit) < 0);
+            assert(byte_wise_compare(*start, limit) < 0);
         }
     }
 }
 
-void ByteWiseComparator::find_short_successor(std::string *key) const {
+void byte_wise_find_short_successor(std::string *key) {
     size_t n = key->size();
     for (size_t i = 0; i < n; i++) {
         const uint8_t byte = (*key)[i];
@@ -59,6 +60,13 @@ void ByteWiseComparator::find_short_successor(std::string *key) const {
         }
     }
     // *key is a run of 0xffs.  Leave it alone.
+}
+} // namespace
+
+const Comparator new_byte_wise_comparator() {
+    return Comparator{&byte_wise_compare, &byte_wise_name,
+                      &byte_wise_find_shortest_separator,
+                      &byte_wise_find_short_successor};
 }
 
 } // namespace anchordb

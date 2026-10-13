@@ -15,12 +15,11 @@
 #pragma once
 
 #include "arena.h"
-#include <anchordb/comparator.h>
-#include <anchordb/slice.h>
 #include <atomic>
 #include <cassert>
 #include <cstddef>
 #include <random>
+#include <string_view>
 
 namespace anchordb {
 
@@ -97,7 +96,7 @@ template <typename Key, class Comparator> class Skiplist_MWMR {
             return node_->key_;
         }
 
-        const Slice &value() const {
+        const std::string_view &value() const {
             assert(valid());
             return node_->value_;
         }

@@ -13,20 +13,20 @@
 // limitations under the License.
 
 #pragma once
+
 #include "arena.h"
 #include "util/random.h"
-#include <anchordb/comparator.h>
-#include <anchordb/slice.h>
 #include <atomic>
 #include <cassert>
 #include <cstddef>
+#include <string_view>
 
 namespace anchordb {
 
 // previously as `Skiplist_SWMR`. options for multiple variant of skiplist will
 // be removed in the future.
 
-template <typename Key, class Comparator> class Skiplist {
+template <typename Key, class Cmp> class Skiplist {
   private:
     struct Node {
         const Key key_;
@@ -40,7 +40,7 @@ template <typename Key, class Comparator> class Skiplist {
     };
 
   public:
-    explicit Skiplist(Comparator cmp, Arena *arena)
+    explicit Skiplist(Cmp cmp, Arena *arena)
         : cmp_(cmp), arena_(arena), curr_height_{0}, rnd_(0xdeadbeef) {
         head_ = new_node_(0, k_max_height_);
         for (int i = 0; i <= k_max_height_; ++i) {
@@ -92,7 +92,7 @@ template <typename Key, class Comparator> class Skiplist {
             return node_->key_;
         }
 
-        const Slice &value() const {
+        const std::string_view &value() const {
             assert(valid());
             return node_->value_;
         }
@@ -130,7 +130,7 @@ template <typename Key, class Comparator> class Skiplist {
 
   private:
     Arena *arena_;
-    Comparator cmp_;
+    Cmp cmp_;
 
     int k_max_height_ = 12;
     float prob_factor_ = 0.5f;

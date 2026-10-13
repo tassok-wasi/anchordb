@@ -64,7 +64,7 @@ uint32_t murmurhash2_32(const char *data, size_t n, uint32_t seed) {
     return h;
 }
 
-uint64_t xx_hash64(const Slice &slice, uint64_t seed) {
+uint64_t xx_hash64(std::string_view slice, uint64_t seed) {
     const uint8_t *p = reinterpret_cast<const uint8_t *>(slice.data());
     size_t len = slice.size();
 
@@ -166,7 +166,7 @@ uint64_t xx_hash64(const Slice &slice, uint64_t seed) {
     return h64;
 }
 
-uint64_t murmurhash3_64(const Slice &slice, uint64_t seed) {
+uint64_t murmurhash3_64(std::string_view slice, uint64_t seed) {
     const char *data = slice.data();
     const size_t len = slice.size();
 
