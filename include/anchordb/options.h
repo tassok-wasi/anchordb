@@ -16,7 +16,7 @@
 
 #include "anchordb/export.h"
 #include <cstddef>
-#include <cstdint>
+
 namespace anchordb {
 
 class Cache;
@@ -30,9 +30,11 @@ enum class ANCHORDB_EXPORT CompressionType {
     None = 0x0,
     Snappy = 0x1,
     Zstd = 0x2,
+    Lz4 = 0x3,
+    Zlib = 0x4,
 };
 
-enum class ANCHORDB_EXPORT MapType : uint8_t {
+enum class ANCHORDB_EXPORT MapType {
     RobbinHood = 0x0,
     LinearProbing = 0x1,
     Swiss = 0x2,

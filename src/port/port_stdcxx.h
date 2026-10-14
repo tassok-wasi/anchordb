@@ -25,24 +25,32 @@
 // Define to 1 if you have a definition for fdatasync() in <unistd.h>.
 #if !defined(HAS_FDATASYNC)
     #define HAS_FDATASYNC 1
-#endif // !defined(HAVE_FDATASYNC)
+#endif // !defined(HAS_FDATASYNC)
 
 // Define to 1 if you have a definition for F_FULLFSYNC in <fcntl.h>.
 #if !defined(HAS_FULLFSYNC)
     #define HAVE_FULLFSYNC 0
-#endif // !defined(HAVE_FULLFSYNC)
+#endif // !defined(HAS_FULLFSYNC)
 
 // Define to 1 if you have a definition for O_CLOEXEC in <fcntl.h>.
 #if !defined(HAS_O_CLOEXEC)
     #define HAS_O_CLOEXEC 1
-#endif // !defined(HAVE_O_CLOEXEC)
+#endif // !defined(HAS_O_CLOEXEC)
 
 // Define to 1 if you have Google Snappy.
 #if !defined(HAS_SNAPPY)
     #define HAS_SNAPPY 0
-#endif // !defined(HAVE_SNAPPY)
+#endif // !defined(HAS_SNAPPY)
 
 // Define to 1 if you have Zstd.
 #if !defined(HAS_ZSTD)
     #define HAS_ZSTD 0
-#endif // !defined(HAVE_ZSTD)
+#endif // !defined(HAS_ZSTD)
+
+#if !defined(HAS_LZ4)
+    #define HAS_LZ4 0
+#endif // !defined(HAS_LZ4)
+
+#if !defined(HAS_ZLIB)
+    #define HAS_ZLIB 0
+#endif // !defined(HAS_ZLIB)

@@ -19,8 +19,8 @@ target_sources(anchordb
         FILES
             include/anchordb/macro.h
             include/anchordb/export.h
-            include/anchordb/slice.h
             include/anchordb/comparator.h
+            include/anchordb/compressor.h
             include/anchordb/iterator.h
             include/anchordb/status.h
             include/anchordb/filter.h
@@ -37,6 +37,9 @@ target_sources(anchordb
         src/memtable/swsr_skiplist.h
         src/memtable/skiplist.h
         src/memtable/table.h
+        src/memtable/table.cc
+        src/memtable/table_iter.h
+        src/memtable/table_util.h
         src/util/coding.h
         src/util/coding.cc
         src/util/crc32.h
@@ -44,6 +47,7 @@ target_sources(anchordb
         src/env/env.h
         src/util/aligned_buffer.h
         src/util/comparator.cc
+        src/util/compressor.cc
         src/util/status.cc
         src/util/random.h
         src/util/hash.h
@@ -54,7 +58,6 @@ target_sources(anchordb
         src/util/filter/cuckoo_filter.cc
         src/util/filter/ribbon_filter.h
         src/util/filter/ribbon_filter.cc
-        src/util/filter/filter_dispatch.h
         src/db/db_format.h
         src/db/db_format.cc
         src/db/wal_reader.h
@@ -76,9 +79,14 @@ target_sources(anchordb
         src/cache/linear_prob_map.h
         src/cache/list.h
         src/util/thread_pool.h
-        src/port/port_thread.h
         src/cache/arc.h
         src/cache/arc.cc
+        src/sstable/empty_iter.h
+        src/sstable/format.h
+        src/sstable/format.cc
+        src/port/port.h
+        src/port/port_thread.h
+        src/port/port_stdcxx.h
 )
 
 if (WIN32)
@@ -178,6 +186,23 @@ else()
     message(STATUS "Snappy NOT found. Disabling Snappy support.")
 endif()
 
+find_package(lz4 CONFIG)
+if(lz4_FOUND)
+    target_link_libraries(anchordb PRIVATE lz4::lz4)
+    target_compile_definitions(anchordb PRIVATE HAS_LZ4=1)
+    message(STATUS "lz4 found! Enabling lz4 block compression.")
+else()
+    message(STATUS "lz4 NOT found. Disabling lz4 support.")
+endif()
+
+find_package(ZLIB)
+if(ZLIB_FOUND)
+    target_link_libraries(anchordb PRIVATE ZLIB::ZLIB)
+    target_compile_definitions(anchordb PRIVATE HAS_ZLIB=1)
+    message(STATUS "ZLIB found! Enabling ZLIB block compression.")
+else()
+    message(STATUS "ZLIB NOT found. Disabling ZLIB support.")
+endif()
 
 # ---------- testing not set up yet ----------
 

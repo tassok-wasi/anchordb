@@ -15,6 +15,7 @@
 #pragma once
 
 #include "anchordb/export.h"
+#include "anchordb/options.h"
 #include <cstddef>
 #include <string>
 namespace anchordb {
@@ -30,5 +31,12 @@ struct ANCHORDB_EXPORT Compressor {
 
 Compressor ANCHORDB_EXPORT new_snappy_compressor();
 Compressor ANCHORDB_EXPORT new_zstd_compressor();
+Compressor ANCHORDB_EXPORT new_lz4_compressor();
+Compressor ANCHORDB_EXPORT new_zlib_compressor();
+
+// Returns the built-in compressor for `type`. Returns a Compressor with null
+// function pointers if `type` has no implementation (e.g.
+// CompressionType::None).
+Compressor ANCHORDB_EXPORT new_compressor(CompressionType type);
 
 } // namespace anchordb

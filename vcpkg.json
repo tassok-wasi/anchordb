@@ -3,6 +3,8 @@
   "version-string": "1.0.0",
   "dependencies": [
     "zstd",
-    "snappy"
+    "snappy",
+    "lz4",
+    "zlib"
   ]
 }

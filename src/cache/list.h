@@ -16,6 +16,7 @@
 
 #include "swiss_map.h"
 #include "util.h"
+#include <cassert>
 
 namespace anchordb {
 

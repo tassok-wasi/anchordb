@@ -42,6 +42,11 @@
     #include <snappy.h>
 #endif // HAVE_SNAPPY
 #if HAS_ZSTD
-    #include <algorithm>
     #include <zstd.h>
 #endif // HAVE_ZSTD
+#if HAS_LZ4
+    #include <lz4frame.h>
+#endif // HAS_LZ4
+#if HAS_ZLIB
+    #include <zlib.h>
+#endif // HAS_ZLIB

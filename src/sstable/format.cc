@@ -113,8 +113,8 @@ Status read_block(RandomAccessFileReader *file, const ReadOptions &options,
         }
     }
 
-    switch (data[n]) {
-    case static_cast<int>(CompressionType::None):
+    const CompressionType type = static_cast<CompressionType>(data[n]);
+    if (type == CompressionType::None) {
         if (data != buf) {
             delete[] buf;
             result->data = std::string_view(data, n);
@@ -125,54 +125,30 @@ Status read_block(RandomAccessFileReader *file, const ReadOptions &options,
             result->heap_allocated = true;
             result->cachable = true;
         }
+        return Status::ok();
+    }
 
-        break;
-    case static_cast<int>(CompressionType::Snappy): {
-        Compressor snappy_compressor = new_snappy_compressor();
-        size_t ulength = 0;
-        if (!snappy_compressor.get_uncompressed_length(data, n, &ulength)) {
-            delete[] buf;
-            return Status::corruption(
-                "corrupted snappy compressed block length");
-        }
-        char *ubuf = new char[ulength];
-        if (!snappy_compressor.uncompress(data, n, ubuf)) {
-            delete[] buf;
-            delete[] ubuf;
-            return Status::corruption(
-                "corrupted snappy compressed block contents");
-        }
-        delete[] buf;
-        result->data = std::string_view(ubuf, ulength);
-        result->heap_allocated = true;
-        result->cachable = true;
-        break;
-    }
-    case static_cast<int>(CompressionType::Zstd): {
-        Compressor zstd_compressor = new_zstd_compressor();
-        size_t ulength = 0;
-        if (!zstd_compressor.get_uncompressed_length(data, n, &ulength)) {
-            delete[] buf;
-            return Status::corruption("corrupted zstd compressed block length");
-        }
-        char *ubuf = new char[ulength];
-        if (!zstd_compressor.uncompress(data, n, ubuf)) {
-            delete[] buf;
-            delete[] ubuf;
-            return Status::corruption(
-                "corrupted zstd compressed block contents");
-        }
-        delete[] buf;
-        result->data = std::string_view(ubuf, ulength);
-        result->heap_allocated = true;
-        result->cachable = true;
-        break;
-    }
-    default:
+    Compressor compressor = new_compressor(type);
+    if (compressor.get_uncompressed_length == nullptr ||
+        compressor.uncompress == nullptr) {
         delete[] buf;
         return Status::corruption("bad block type");
     }
-
+    size_t ulength = 0;
+    if (!compressor.get_uncompressed_length(data, n, &ulength)) {
+        delete[] buf;
+        return Status::corruption("corrupted compressed block length");
+    }
+    char *ubuf = new char[ulength];
+    if (!compressor.uncompress(data, n, ubuf)) {
+        delete[] buf;
+        delete[] ubuf;
+        return Status::corruption("corrupted compressed block contents");
+    }
+    delete[] buf;
+    result->data = std::string_view(ubuf, ulength);
+    result->heap_allocated = true;
+    result->cachable = true;
     return Status::ok();
 }
 
