@@ -5,4 +5,9 @@
   "IndentPPDirectives": "BeforeHash",
   "AlignConsecutiveMacros":
     { "Enabled": true, "AcrossComments": false, "AcrossEmptyLines": false },
+  "AllowShortIfStatementsOnASingleLine": "WithoutElse",
+  "AllowShortLoopsOnASingleLine": true,
+  "AllowShortFunctionsOnASingleLine": "All",
+  "AllowShortCaseLabelsOnASingleLine": true,
+  "AllowShortBlocksOnASingleLine": "Always",
 }

@@ -38,8 +38,6 @@ target_sources(anchordb
         src/memtable/skiplist.h
         src/memtable/table.h
         src/memtable/table.cc
-        src/memtable/table_iter.h
-        src/memtable/table_util.h
         src/util/coding.h
         src/util/coding.cc
         src/util/crc32.h
@@ -84,6 +82,7 @@ target_sources(anchordb
         src/sstable/empty_iter.h
         src/sstable/format.h
         src/sstable/format.cc
+        src/sstable/iterator_wrapper.h
         src/port/port.h
         src/port/port_thread.h
         src/port/port_stdcxx.h

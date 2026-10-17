@@ -8,3 +8,6 @@ readorder
 .kilo/
 .vscode/
 .zed/
+.rules
+AGENTS.md
+ARCHITECTURE.md
