@@ -14,11 +14,11 @@
 
 #pragma once
 
+#include "anchordb/iterator.h"
 #include "anchordb/status.h"
 #include "arena.h"
 #include "db/db_format.h"
-#include "table_iter.h"
-#include "table_util.h"
+#include "memtable/skiplist.h"
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -27,6 +27,71 @@
 #include <utility>
 
 namespace anchordb {
+
+inline std::string_view get_len_prefixed_slice(const char *data) {
+    uint32_t len;
+    const char *p = data;
+    p = get_varint_32_ptr(p, p + 5, &len);
+    return std::string_view(p, len);
+}
+
+inline char *encode_key(std::string *scratch, std::string_view target) {
+    scratch->clear();
+    put_varint_32(scratch, target.size());
+    scratch->append(target.data(), target.size());
+    return scratch->data();
+}
+
+struct KeyComparator {
+    const Comparator comparator;
+    explicit KeyComparator(const Comparator &c) : comparator(c) {}
+    int operator()(const char *aptr, const char *bptr) const {
+        std::string_view a = get_len_prefixed_slice(aptr);
+        std::string_view b = get_len_prefixed_slice(bptr);
+        return comparator.compare(a, b);
+    }
+};
+
+using Table = Skiplist<const char *, KeyComparator>;
+
+class MemtableIterator : public Iterator {
+  public:
+    explicit MemtableIterator(Table *table) : iter_(table) {}
+
+    MemtableIterator(MemtableIterator &&other) noexcept
+        : iter_(std::move(other.iter_)), tmp_(std::move(other.tmp_)) {}
+
+    MemtableIterator &operator=(MemtableIterator &&other) {
+        if (this != &other) {
+            this->iter_ = std::move(other.iter_);
+            this->tmp_ = std::move(other.tmp_);
+        }
+        return *this;
+    }
+
+    ~MemtableIterator() = default;
+
+    bool valid() const override { return iter_.valid(); }
+    void next() override { iter_.next(); }
+    void prev() override { iter_.prev(); }
+    void seek(std::string_view key) override {
+        iter_.seek(encode_key(&tmp_, key));
+    }
+    void seek_to_first() override { iter_.seek_to_first(); }
+    void seek_to_last() override { iter_.seek_to_last(); }
+    std::string_view key() const override {
+        return get_len_prefixed_slice(iter_.key());
+    }
+    std::string_view value() const override {
+        std::string_view key_slice = get_len_prefixed_slice(iter_.key());
+        return get_len_prefixed_slice(key_slice.data() + key_slice.size());
+    }
+    Status status() const override { return Status::ok(); }
+
+  private:
+    typename Table::Iterator iter_;
+    std::string tmp_;
+};
 
 class MemTable {
   public:
@@ -50,7 +115,7 @@ class MemTable {
 
     size_t approximate_memory_usage() const { return arena_.memory_usage(); }
 
-    Iterator new_iterator() { return new_memtable_iterator(&iter_); }
+    Iterator *new_iterator() { return new MemtableIterator(&table_); }
 
     void add(seq_num seq, ValueType type, std::string_view key,
              std::string_view value);
@@ -60,10 +125,10 @@ class MemTable {
     ~MemTable() { assert(refs_ == 0); }
 
     Comparator comparator_;
-    MemtableIterator iter_;
-    int refs_;
     Arena arena_;
+    int refs_;
     Table table_;
+    MemtableIterator iter_;
 };
 
 } // namespace anchordb
