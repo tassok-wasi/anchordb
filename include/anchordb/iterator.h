@@ -16,56 +16,40 @@
 
 #include "anchordb/export.h"
 #include "anchordb/status.h"
+#include <string_view>
 
 namespace anchordb {
 
-struct ANCHORDB_EXPORT Iterator {
-    void *state = nullptr;
+// A bidirectional iterator over an ordered key-value store. Keys are
+// returned in ascending order, and the same iterator may not be used
+// concurrently from multiple threads.
+class ANCHORDB_EXPORT Iterator {
+  public:
+    Iterator();
 
-    bool (*valid)(const void *state) = nullptr;
-    void (*next)(void *state) = nullptr;
-    void (*prev)(void *state) = nullptr;
-    void (*seek)(void *state, std::string_view key) = nullptr;
-    void (*seek_to_first)(void *state) = nullptr;
-    void (*seek_to_last)(void *state) = nullptr;
-    std::string_view (*key)(const void *state) = nullptr;
-    std::string_view (*value)(const void *state) = nullptr;
-    Status (*status)(const void *state) = nullptr;
-
-    void (*destroy)(void *state) = nullptr;
-
-    Iterator() = default;
-
+    // Iterators are not copyable; use the factory functions below or
+    // obtain one from the owning database.
     Iterator(const Iterator &) = delete;
     Iterator &operator=(const Iterator &) = delete;
 
-    Iterator(Iterator &&other) noexcept { *this = std::move(other); }
-    Iterator &operator=(Iterator &&other) noexcept {
-        if (this != &other) {
-            state = other.state;
-            valid = other.valid;
-            next = other.next;
-            prev = other.prev;
-            seek = other.seek;
-            seek_to_first = other.seek_to_first;
-            seek_to_last = other.seek_to_last;
-            key = other.key;
-            value = other.value;
-            status = other.status;
-            destroy = other.destroy;
-
-            other.state = nullptr;
-            other.destroy = nullptr;
-        }
-        return *this;
-    }
-
-    /// Destroys the Iterator, releasing any associated resources.
-    ~Iterator() {
-        if (destroy && state) {
-            destroy(state);
-        }
-    }
+    virtual ~Iterator();
+    // Returns true if the iterator is currently positioned at a valid entry.
+    virtual bool valid() const = 0;
+    virtual void seek_to_first() = 0;
+    virtual void seek_to_last() = 0;
+    // Positions the iterator at the first key >= target.
+    virtual void seek(std::string_view target) = 0;
+    virtual void next() = 0;
+    virtual void prev() = 0;
+    // The following accessors require valid() to be true.
+    virtual std::string_view key() const = 0;
+    virtual std::string_view value() const = 0;
+    virtual Status status() const = 0;
 };
+
+// Creates an iterator over an empty range.
+Iterator *new_empty_iterator();
+// Creates an iterator that immediately reports the given error via status().
+Iterator *new_error_iterator(const Status &status);
 
 } // namespace anchordb

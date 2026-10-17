@@ -15,10 +15,17 @@
 #pragma once
 
 #include "anchordb/export.h"
-#include "anchordb/options.h"
 #include <cstddef>
 #include <string>
 namespace anchordb {
+
+enum class ANCHORDB_EXPORT CompressionType {
+    None = 0x0,
+    Snappy = 0x1,
+    Zstd = 0x2,
+    Lz4 = 0x3,
+    Zlib = 0x4,
+};
 
 struct ANCHORDB_EXPORT Compressor {
     bool (*compress)(const char *input, size_t length, std::string *output,

@@ -17,7 +17,10 @@
 #include "anchordb/export.h"
 #include <cstddef>
 #include <string>
+
 namespace anchordb {
+
+enum class FilterType { Bloom = 0x0, Cuckoo = 0x1, Ribbon = 0x2 };
 
 struct ANCHORDB_EXPORT Filter {
     // We use a void* to hold a pointer to the filter's configuration state,

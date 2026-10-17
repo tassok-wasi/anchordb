@@ -14,25 +14,18 @@
 
 #pragma once
 
+#include "anchordb/comparator.h"
+#include "anchordb/compressor.h"
 #include "anchordb/export.h"
+#include "anchordb/filter.h"
 #include <cstddef>
 
 namespace anchordb {
 
 class Cache;
-class Comparator;
 class Env;
-class Filter;
 class Logger;
 class Snapshot;
-
-enum class ANCHORDB_EXPORT CompressionType {
-    None = 0x0,
-    Snappy = 0x1,
-    Zstd = 0x2,
-    Lz4 = 0x3,
-    Zlib = 0x4,
-};
 
 enum class ANCHORDB_EXPORT MapType {
     RobbinHood = 0x0,
@@ -50,15 +43,18 @@ struct ANCHORDB_EXPORT Options {
     Logger *info_log = nullptr;
     size_t write_buffer_size = 4 * 1024 * 1024;
     int max_open_files = 1000;
-    MapType map = MapType::Swiss;
+    MapType active_map = MapType::Swiss;
     Cache *block_cache = nullptr;
     size_t block_size = 4 * 1024;
     int block_restart_interval = 16;
     size_t max_file_size = 2 * 1024 * 1024;
-    CompressionType compression = CompressionType::Snappy;
+    CompressionType active_compression_type = CompressionType::Snappy;
+    FilterType active_filter_type = FilterType::Bloom;
     int zstd_compression_level = 1;
     bool reuse_logs = false;
-    const Filter *filter = nullptr;
+    Comparator comparator = Comparator{};
+    Compressor compressor = Compressor{};
+    Filter filter = Filter{};
 };
 
 struct ANCHORDB_EXPORT ReadOptions {
