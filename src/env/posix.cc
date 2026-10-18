@@ -14,8 +14,10 @@
 
 #include "anchordb/env.h"
 #include "anchordb/status.h"
-#include "env/env_posix.h"
-#include "env/io_posix.h"
+#include "env/posix.h"
+#include "file/random_access_reader.h"
+#include "file/seqeuntial_reader.h"
+#include "file/writer.h"
 #include "util/posix_logger.h"
 
 #include <chrono>
@@ -84,19 +86,13 @@ Status PosixEnv::new_sequential_file_reader(const std::string &filename,
                                             SequentialFileReader **result,
                                             size_t buffer_size) {
     int flags = O_RDONLY | kOpenBaseFlags;
-    if (direct_io_) {
-        flags |= O_DIRECT;
-    }
+    if (direct_io_) { flags |= O_DIRECT; }
 
     int fd = ::open(filename.c_str(), flags, 0);
-    if (fd < 0) {
-        return posix_error(filename, errno);
-    }
+    if (fd < 0) { return posix_error(filename, errno); }
 
     struct io_uring *ring = get_thread_local_ring();
-    if (!ring) {
-        ring = &default_ring_;
-    }
+    if (!ring) { ring = &default_ring_; }
     size_t buf_size =
         (buffer_size != 0) ? buffer_size : k_seq_file_reader_buf_size;
     AlignedBuffer buf(buf_size, k_o_direct_alignment);
@@ -113,9 +109,7 @@ PosixEnv::new_random_access_file_reader(const std::string &filename,
 
     if (fd_limiter_.acquire()) {
         int flags = O_RDONLY | kOpenBaseFlags;
-        if (direct_io_) {
-            flags |= O_DIRECT;
-        }
+        if (direct_io_) { flags |= O_DIRECT; }
 
         fd = ::open(filename.c_str(), flags, 0644);
         if (fd < 0) {
@@ -128,9 +122,7 @@ PosixEnv::new_random_access_file_reader(const std::string &filename,
 
     // Obtain the calling thread's dedicated lock-free io_uring ring
     struct io_uring *ring = get_thread_local_ring();
-    if (!ring) {
-        ring = &default_ring_;
-    }
+    if (!ring) { ring = &default_ring_; }
 
     *result = new PosixRandomAccessFileReader(filename, fd, &fd_limiter_, ring,
                                               direct_io_);
@@ -141,20 +133,14 @@ Status PosixEnv::new_writable_file_writer(const std::string &filename,
                                           WritableFileWriter **result,
                                           size_t buffer_size) {
     int flags = O_CREAT | O_WRONLY | O_TRUNC | kOpenBaseFlags;
-    if (direct_io_) {
-        flags |= O_DIRECT;
-    }
+    if (direct_io_) { flags |= O_DIRECT; }
 
     int fd = ::open(filename.c_str(), flags, 0644);
-    if (fd < 0) {
-        return posix_error(filename, errno);
-    }
+    if (fd < 0) { return posix_error(filename, errno); }
 
     // Obtain the calling thread's dedicated lock-free io_uring ring
     struct io_uring *ring = get_thread_local_ring();
-    if (!ring) {
-        ring = &default_ring_;
-    }
+    if (!ring) { ring = &default_ring_; }
 
     size_t buf_size =
         (buffer_size != 0) ? buffer_size : k_writable_file_buf_size;
@@ -168,20 +154,14 @@ Status PosixEnv::new_appendable_file_writer(const std::string &filename,
                                             WritableFileWriter **result,
                                             size_t buffer_size) {
     int flags = O_CREAT | O_WRONLY | O_APPEND | kOpenBaseFlags;
-    if (direct_io_) {
-        flags |= O_DIRECT;
-    }
+    if (direct_io_) { flags |= O_DIRECT; }
 
     int fd = ::open(filename.c_str(), flags, 0644);
-    if (fd < 0) {
-        return posix_error(filename, errno);
-    }
+    if (fd < 0) { return posix_error(filename, errno); }
 
     // Obtain the calling thread's dedicated lock-free io_uring ring
     struct io_uring *ring = get_thread_local_ring();
-    if (!ring) {
-        ring = &default_ring_;
-    }
+    if (!ring) { ring = &default_ring_; }
 
     size_t buf_size =
         (buffer_size != 0) ? buffer_size : k_writable_file_buf_size;
@@ -189,9 +169,7 @@ Status PosixEnv::new_appendable_file_writer(const std::string &filename,
 
     uint64_t file_size = 0;
     Status s = get_file_size(filename, &file_size);
-    if (!s.is_ok()) {
-        return s;
-    }
+    if (!s.is_ok()) { return s; }
 
     *result = new PosixWritableFileWriter(filename, fd, ring, &buf, direct_io_,
                                           file_size);
@@ -207,9 +185,7 @@ Status PosixEnv::get_children(const std::string &dir_path,
                               std::vector<std::string> *result) {
     result->clear();
     ::DIR *dir = ::opendir(dir_path.c_str());
-    if (dir == nullptr) {
-        return posix_error(dir_path, errno);
-    }
+    if (dir == nullptr) { return posix_error(dir_path, errno); }
     struct ::dirent *entry;
     while ((entry = ::readdir(dir)) != nullptr) {
         result->emplace_back(entry->d_name);
@@ -233,9 +209,7 @@ Status PosixEnv::create_dir(const std::string &dir_name) {
 }
 
 Status PosixEnv::remove_dir(const std::string &dir_name) {
-    if (::rmdir(dir_name.c_str()) != 0) {
-        return posix_error(dir_name, errno);
-    }
+    if (::rmdir(dir_name.c_str()) != 0) { return posix_error(dir_name, errno); }
     return Status::ok();
 }
 
@@ -260,9 +234,7 @@ Status PosixEnv::lock_file(const std::string &filename, FileLock **lock) {
     *lock = nullptr;
 
     int fd = ::open(filename.c_str(), O_RDWR | O_CREAT | kOpenBaseFlags, 0644);
-    if (fd < 0) {
-        return posix_error(filename, errno);
-    }
+    if (fd < 0) { return posix_error(filename, errno); }
 
     if (!locks_.insert(filename)) {
         ::close(fd);
@@ -345,4 +317,4 @@ void PosixEnv::sleep_for_micros(int micros) {
     std::this_thread::sleep_for(std::chrono::microseconds(micros));
 }
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

@@ -45,9 +45,7 @@ class PosixLogger final : public Logger {
         entry += thread_tag();
         entry += ' ';
         append_message(entry, format, arguments);
-        if (entry.empty() || entry.back() != '\n') {
-            entry += '\n';
-        }
+        if (entry.empty() || entry.back() != '\n') { entry += '\n'; }
 
         std::fwrite(entry.data(), 1, entry.size(), fp_);
         std::fflush(fp_);
@@ -94,9 +92,7 @@ class PosixLogger final : public Logger {
         va_copy(arguments_copy, arguments);
         const int needed = std::vsnprintf(nullptr, 0, format, arguments_copy);
         va_end(arguments_copy);
-        if (needed < 0) {
-            return;
-        }
+        if (needed < 0) { return; }
 
         const std::size_t offset = entry.size();
         entry.resize(offset + static_cast<std::size_t>(needed) + 1);
@@ -108,4 +104,4 @@ class PosixLogger final : public Logger {
     std::FILE *const fp_;
 };
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

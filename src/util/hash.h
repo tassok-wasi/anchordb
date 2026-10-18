@@ -27,4 +27,4 @@ uint64_t xx_hash64(std::string_view slice, uint64_t seed = 0);
 uint64_t murmurhash3_64(std::string_view slice,
                         uint64_t seed = 0x9e3779b97f4a7c13ULL);
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

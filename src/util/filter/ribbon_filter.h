@@ -14,13 +14,13 @@
 
 #pragma once
 
+#include "anchordb/anchordb_namespace.h"
 #include "anchordb/filter.h"
 #include "util/hash.h"
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
-#include "anchordb/anchordb_namespace.h"
 
 namespace ANCHORDB_NAMESPACE {
 
@@ -81,4 +81,4 @@ inline Filter new_ribbon_filter_filter(size_t bits_per_key) {
                   &ribbon_destroy};
 }
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

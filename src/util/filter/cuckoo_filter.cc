@@ -21,16 +21,14 @@ namespace ANCHORDB_NAMESPACE {
 
 void cuckoo_create(const void *state_ptr, const std::string_view *keys,
                    size_t n, std::string *dst) {
-    if (n == 0)
-        return;
+    if (n == 0) return;
 
     // Number of buckets: smallest power of two that keeps the load factor
     // at or below 50 % (two slots per key on average).
     size_t num_buckets = 4;
     const size_t min_buckets =
         (n + kCuckooSlotsPerBucket - 1) / kCuckooSlotsPerBucket * 2;
-    while (num_buckets < min_buckets)
-        num_buckets <<= 1;
+    while (num_buckets < min_buckets) num_buckets <<= 1;
 
     const size_t total_bytes = num_buckets * kCuckooSlotsPerBucket;
     const size_t init_size = dst->size();
@@ -62,8 +60,7 @@ void cuckoo_create(const void *state_ptr, const std::string_view *keys,
                 }
             }
         }
-        if (inserted)
-            continue;
+        if (inserted) continue;
 
         // Both buckets are full — cuckoo eviction.
         uint32_t rng = h; // deterministic seed from the key hash
@@ -90,8 +87,7 @@ void cuckoo_create(const void *state_ptr, const std::string_view *keys,
                     break;
                 }
             }
-            if (placed)
-                break;
+            if (placed) break;
         }
         // If we exhaust relocations the key is silently dropped.  This is
         // rare at 50 % load and is acceptable for a probabilistic filter
@@ -102,8 +98,7 @@ void cuckoo_create(const void *state_ptr, const std::string_view *keys,
 bool cuckoo_match(const void *state_ptr, std::string_view key,
                   std::string_view cuckoo_filter) {
     const size_t len = cuckoo_filter.size();
-    if (len == 0 || len % kCuckooSlotsPerBucket != 0)
-        return false;
+    if (len == 0 || len % kCuckooSlotsPerBucket != 0) return false;
 
     const char *buckets = cuckoo_filter.data();
     const size_t num_buckets = len / kCuckooSlotsPerBucket;
@@ -124,4 +119,4 @@ bool cuckoo_match(const void *state_ptr, std::string_view key,
     return false;
 }
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

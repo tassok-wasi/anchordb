@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include "win/env/win.h"
+#include "win/file/io_win.h"
 #include <cstddef>
 #include <malloc.h>
 

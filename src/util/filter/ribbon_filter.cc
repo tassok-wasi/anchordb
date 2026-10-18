@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "anchordb/anchordb_namespace.h"
 #include "ribbon_filter.h"
 #include <algorithm>
 #include <bit>
@@ -21,22 +22,19 @@
 #include <string>
 #include <string_view>
 #include <vector>
-#include "anchordb/anchordb_namespace.h"
 
 namespace ANCHORDB_NAMESPACE {
 
 void ribbon_create(const void *state_ptr, const std::string_view *keys,
                    size_t n, std::string *dst) {
-    if (n == 0)
-        return;
+    if (n == 0) return;
 
     auto *state = static_cast<const RibbonState *>(state_ptr);
 
     // Number of columns.  Must be strictly greater than the ribbon width so
     // that every key has a valid start column.
     size_t num_bits = n * state->bits_per_key;
-    if (num_bits < k_ribbon_width + 1)
-        num_bits = k_ribbon_width + 1;
+    if (num_bits < k_ribbon_width + 1) num_bits = k_ribbon_width + 1;
     // Round up to a byte boundary so the serialized payload is whole bytes.
     num_bits = (num_bits + 7) & ~static_cast<size_t>(7);
 
@@ -53,8 +51,7 @@ void ribbon_create(const void *state_ptr, const std::string_view *keys,
 
     // Sort row indices by start column — required for banded elimination.
     std::vector<size_t> order(n);
-    for (size_t i = 0; i < n; i++)
-        order[i] = i;
+    for (size_t i = 0; i < n; i++) order[i] = i;
     std::sort(order.begin(), order.end(),
               [&](size_t a, size_t b) { return start[a] < start[b]; });
 
@@ -106,9 +103,7 @@ void ribbon_create(const void *state_ptr, const std::string_view *keys,
         // (Bits below the pivot are guaranteed zero after forward elimination.)
         for (size_t b = 0; b < k_ribbon_width; b++) {
             const size_t pos = base + b;
-            if (pos > c && (row & (1ULL << b)) != 0) {
-                val ^= z[pos];
-            }
+            if (pos > c && (row & (1ULL << b)) != 0) { val ^= z[pos]; }
         }
         z[c] = val;
     }
@@ -128,8 +123,7 @@ bool ribbon_match(const void *state_ptr, const std::string_view &key,
                   const std::string_view &ribbon_filter) {
     const size_t len = ribbon_filter.size();
     // Need at least 1 header byte + enough room for a ribbon.
-    if (len <= k_ribbon_width + 1)
-        return false;
+    if (len <= k_ribbon_width + 1) return false;
 
     const char *data = ribbon_filter.data();
     const size_t num_bits = len - 1; // exclude the header byte
@@ -152,4 +146,4 @@ bool ribbon_match(const void *state_ptr, const std::string_view &key,
     return result == fp;
 }
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

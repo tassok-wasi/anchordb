@@ -17,6 +17,7 @@ target_sources(anchordb
         BASE_DIRS
             include
         FILES
+            include/anchordb/anchordb_namespace.h
             include/anchordb/macro.h
             include/anchordb/export.h
             include/anchordb/comparator.h
@@ -42,7 +43,7 @@ target_sources(anchordb
         src/util/coding.cc
         src/util/crc32.h
         src/util/crc32.cc
-        src/env/env.h
+        src/env/env.cc
         src/util/aligned_buffer.h
         src/util/comparator.cc
         src/util/compressor.cc
@@ -58,11 +59,13 @@ target_sources(anchordb
         src/util/filter/ribbon_filter.cc
         src/db/db_format.h
         src/db/db_format.cc
+        src/db/iterator.cc
         src/db/wal_reader.h
         src/db/wal_reader.cc
         src/db/wal_writer.h
         src/db/wal_writer.cc
         src/cache/cache.cc
+        src/cache/cache_wrapper.h
         src/cache/util.h
         src/cache/lru.h
         src/cache/lru.cc
@@ -80,23 +83,37 @@ target_sources(anchordb
         src/cache/arc.h
         src/cache/arc.cc
         src/sstable/empty_iter.h
-        src/sstable/format.h
-        src/sstable/format.cc
+        src/sstable/data_record.h
+        src/sstable/data_record.cc
         src/sstable/iterator_wrapper.h
         src/port/port.h
         src/port/port_thread.h
         src/port/port_stdcxx.h
+        src/sstable/empty_iter.h
+        src/sstable/idx_block_reader.cc
+        src/sstable/idx_block_reader.h
+        src/sstable/idx_block_writer.cc
+        src/sstable/idx_block_writer.h
+        src/sstable/idx_table_builder.cc
+        src/sstable/idx_table_builder.h
+        src/sstable/idx_summary.cc
+        src/sstable/idx_summary.h
+        src/sstable/table.cc
+        src/sstable/table.h
+        src/sstable/table_cache.cc
+        src/sstable/table_cache.h
+        src/sstable/iterator_wrapper.h
 )
 
 if (WIN32)
     target_sources(anchordb
         PRIVATE
-            src/env/env_win.h
-            src/env/env_win.cc
-            src/env/io_win.h
-            src/env/io_win.cc
+            src/port/win/env_win.h
+            src/port/win/env_win.cc
+            src/port/win/io_win.h
+            src/port/win/io_win.cc
             src/port/port_win.h
-            src/util/win_logger.h
+            src/port/win/win_logger.h
     )
 
     # Locate and link IOCP for the Windows I/O completion port engine layer
@@ -106,10 +123,17 @@ if (WIN32)
 elseif (UNIX AND NOT APPLE)
     target_sources(anchordb
         PRIVATE
-            src/env/env_posix.h
-            src/env/env_posix.cc
-            src/env/io_posix.h
-            src/env/io_posix.cc
+            src/env/posix.h
+            src/env/posix.cc
+            src/file/file_meta.h
+            src/file/limiter.h
+            src/file/lock_table.h
+            src/file/random_access_reader.cc
+            src/file/random_access_reader.h
+            src/file/seqeuntial_reader.h
+            src/file/sequential_reader.cc
+            src/file/writer.cc
+            src/file/writer.h
             src/port/port_posix.h
             src/util/posix_logger.h
 

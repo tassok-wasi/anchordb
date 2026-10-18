@@ -19,6 +19,15 @@
 
 namespace ANCHORDB_NAMESPACE {
 
+// Encodes a 16-bit unsigned integer in little-endian byte order.
+// Writes exactly 2 bytes to dst.
+void encode_fixed_16(char *dst, uint16_t value) {
+    uint8_t *buffer = reinterpret_cast<uint8_t *>(dst);
+
+    buffer[0] = static_cast<uint8_t>(value);
+    buffer[1] = static_cast<uint8_t>(value >> 8);
+}
+
 // Encodes a 32-bit unsigned integer in little-endian byte order.
 // Writes exactly 4 bytes to dst.
 void encode_fixed_32(char *dst, uint32_t value) {
@@ -43,6 +52,14 @@ void encode_fixed_64(char *dst, uint64_t value) {
     buffer[5] = static_cast<uint8_t>(value >> 40);
     buffer[6] = static_cast<uint8_t>(value >> 48);
     buffer[7] = static_cast<uint8_t>(value >> 56);
+}
+
+// Decodes a 16-bit unsigned integer from a little-endian byte sequence.
+uint16_t decode_fixed_16(const char *ptr) {
+    const uint8_t *buffer = reinterpret_cast<const uint8_t *>(ptr);
+
+    return (static_cast<uint16_t>(buffer[0])) |
+           (static_cast<uint16_t>(buffer[1]) << 8);
 }
 
 // Decodes a 32-bit unsigned integer from a little-endian byte sequence.
@@ -243,8 +260,7 @@ const char *get_varint_32_ptr_fallback(const char *p, const char *limit,
     const auto *ptr = reinterpret_cast<const uint8_t *>(p);
     const auto *lim = reinterpret_cast<const uint8_t *>(limit);
 
-    if (ptr >= lim)
-        return nullptr;
+    if (ptr >= lim) return nullptr;
 
     uint32_t b0 = *ptr++;
     uint32_t result = b0 & 0x7f;
@@ -253,8 +269,7 @@ const char *get_varint_32_ptr_fallback(const char *p, const char *limit,
         return reinterpret_cast<const char *>(ptr);
     }
 
-    if (ptr >= lim)
-        return nullptr;
+    if (ptr >= lim) return nullptr;
     uint32_t b1 = *ptr++;
     result |= (b1 & 0x7f) << 7;
     if ((b1 & 0x80) == 0) {
@@ -262,8 +277,7 @@ const char *get_varint_32_ptr_fallback(const char *p, const char *limit,
         return reinterpret_cast<const char *>(ptr);
     }
 
-    if (ptr >= lim)
-        return nullptr;
+    if (ptr >= lim) return nullptr;
     uint32_t b2 = *ptr++;
     result |= (b2 & 0x7f) << 14;
     if ((b2 & 0x80) == 0) {
@@ -271,8 +285,7 @@ const char *get_varint_32_ptr_fallback(const char *p, const char *limit,
         return reinterpret_cast<const char *>(ptr);
     }
 
-    if (ptr >= lim)
-        return nullptr;
+    if (ptr >= lim) return nullptr;
     uint32_t b3 = *ptr++;
     result |= (b3 & 0x7f) << 21;
     if ((b3 & 0x80) == 0) {
@@ -280,8 +293,7 @@ const char *get_varint_32_ptr_fallback(const char *p, const char *limit,
         return reinterpret_cast<const char *>(ptr);
     }
 
-    if (ptr >= lim)
-        return nullptr;
+    if (ptr >= lim) return nullptr;
     uint32_t b4 = *ptr++;
     result |= b4 << 28; // 5th byte holds the remaining bits
     if ((b4 & 0x80) == 0) {
@@ -297,8 +309,7 @@ const char *get_varint_64_ptr_fallback(const char *p, const char *limit,
     const auto *ptr = reinterpret_cast<const uint8_t *>(p);
     const auto *lim = reinterpret_cast<const uint8_t *>(limit);
 
-    if (ptr >= lim)
-        return nullptr;
+    if (ptr >= lim) return nullptr;
 
     // Unroll the first 3 bytes (handles values up to ~2 million)
     uint64_t b0 = *ptr++;
@@ -308,8 +319,7 @@ const char *get_varint_64_ptr_fallback(const char *p, const char *limit,
         return reinterpret_cast<const char *>(ptr);
     }
 
-    if (ptr >= lim)
-        return nullptr;
+    if (ptr >= lim) return nullptr;
     uint64_t b1 = *ptr++;
     result |= (b1 & 0x7f) << 7;
     if ((b1 & 0x80) == 0) {
@@ -317,8 +327,7 @@ const char *get_varint_64_ptr_fallback(const char *p, const char *limit,
         return reinterpret_cast<const char *>(ptr);
     }
 
-    if (ptr >= lim)
-        return nullptr;
+    if (ptr >= lim) return nullptr;
     uint64_t b2 = *ptr++;
     result |= (b2 & 0x7f) << 14;
     if ((b2 & 0x80) == 0) {
@@ -369,9 +378,7 @@ bool get_varint_32(std::string_view *input, uint32_t *value) {
     const char *p = input->data();
     const char *limit = p + input->size();
     const char *ptr = get_varint_32_ptr(p, limit, value);
-    if (ptr == nullptr) {
-        return false;
-    }
+    if (ptr == nullptr) { return false; }
     *input = std::string_view(ptr, limit - ptr);
     return true;
 }
@@ -380,9 +387,7 @@ bool get_varint_64(std::string_view *input, uint64_t *value) {
     const char *p = input->data();
     const char *limit = p + input->size();
     const char *ptr = get_varint_64_ptr(p, limit, value);
-    if (ptr == nullptr) {
-        return false;
-    }
+    if (ptr == nullptr) { return false; }
     *input = std::string_view(ptr, limit - ptr);
     return true;
 }
@@ -401,4 +406,4 @@ bool get_len_prefixed_slice(std::string_view *input, std::string_view *result) {
     }
 }
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

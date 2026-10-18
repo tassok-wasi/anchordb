@@ -46,4 +46,4 @@ inline uint32_t unmask(uint32_t masked_crc) {
     return ((rot >> 17) | (rot << 15));
 }
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

@@ -12,10 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+// Out-of-line definitions for the abstract Env/IO base classes.  These
+// destructors are declared in the public env.h but were never defined, so any
+// program that installs a concrete Env (e.g. PosixEnv) fails to link without
+// them.  Defining them here also anchors each class's vtable.
+
+#include "anchordb/env.h"
 
 #include "anchordb/anchordb_namespace.h"
 
 namespace ANCHORDB_NAMESPACE {
-    
-}
+
+Env::~Env() = default;
+EnvWrapper::~EnvWrapper() = default;
+
+SequentialFileReader::~SequentialFileReader() = default;
+RandomAccessFileReader::~RandomAccessFileReader() = default;
+WritableFileWriter::~WritableFileWriter() = default;
+
+Logger::~Logger() = default;
+FileLock::~FileLock() = default;
+
+} // namespace ANCHORDB_NAMESPACE

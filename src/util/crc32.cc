@@ -307,9 +307,7 @@ uint32_t extend_hw(uint32_t crc, const char *data, size_t size) {
         bytes += 2;
         size -= 2;
     }
-    if (size >= 1) {
-        crc = _mm_crc32_u8(crc, *bytes);
-    }
+    if (size >= 1) { crc = _mm_crc32_u8(crc, *bytes); }
 #elif defined(HAS_ARM) && defined(__ARM_FEATURE_CRC32)
     // ARM64 HW CRC32 Acceleration
     while (size >= 8) {
@@ -327,9 +325,7 @@ uint32_t extend_hw(uint32_t crc, const char *data, size_t size) {
         bytes += 2;
         size -= 2;
     }
-    if (size >= 1) {
-        crc = __crc32cb(crc, *bytes);
-    }
+    if (size >= 1) { crc = __crc32cb(crc, *bytes); }
 #else
     // Fallback if target flags were not passed to compiler
     return extend_sw(crc, data, size);
@@ -349,4 +345,4 @@ uint32_t extend(uint32_t crc, const char *data, size_t size) {
 
 uint32_t value(const char *data, size_t size) { return extend(0, data, size); }
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

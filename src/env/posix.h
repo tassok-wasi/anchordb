@@ -16,7 +16,8 @@
 
 #include "anchordb/env.h"
 #include "anchordb/status.h"
-#include "env/io_posix.h"
+#include "file/limiter.h"
+#include "file/lock_table.h"
 #include "port/port.h" // IWYU pragma: keep
 #include "util/thread_pool.h"
 #include <bits/types/struct_timeval.h>
@@ -124,4 +125,4 @@ class PosixEnv : public Env {
     ThreadPool pool{ThreadPool::default_thread_count()};
 };
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

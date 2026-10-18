@@ -87,9 +87,7 @@ bool zstd_compress(const char *input, size_t length, std::string *output,
     output->resize(outlen);
 
     ZSTD_CCtx *ctx = ZSTD_createCCtx();
-    if (ctx == nullptr) {
-        return false;
-    }
+    if (ctx == nullptr) { return false; }
     if (ZSTD_isError(
             ZSTD_CCtx_setParameter(ctx, ZSTD_c_compressionLevel, level))) {
         ZSTD_freeCCtx(ctx);
@@ -97,9 +95,7 @@ bool zstd_compress(const char *input, size_t length, std::string *output,
     }
     outlen = ZSTD_compress2(ctx, &(*output)[0], output->size(), input, length);
     ZSTD_freeCCtx(ctx);
-    if (ZSTD_isError(outlen)) {
-        return false;
-    }
+    if (ZSTD_isError(outlen)) { return false; }
     output->resize(outlen);
     return true;
 #else
@@ -114,19 +110,13 @@ bool zstd_compress(const char *input, size_t length, std::string *output,
 bool zstd_uncompress(const char *input, size_t length, char *output) {
 #if HAS_ZSTD
     size_t outlen = 0;
-    if (!zstd_get_uncompressed_length(input, length, &outlen)) {
-        return false;
-    }
+    if (!zstd_get_uncompressed_length(input, length, &outlen)) { return false; }
 
     ZSTD_DCtx *ctx = ZSTD_createDCtx();
-    if (ctx == nullptr) {
-        return false;
-    }
+    if (ctx == nullptr) { return false; }
     size_t result = ZSTD_decompressDCtx(ctx, output, outlen, input, length);
     ZSTD_freeDCtx(ctx);
-    if (ZSTD_isError(result)) {
-        return false;
-    }
+    if (ZSTD_isError(result)) { return false; }
     return true;
 #else
     (void)input;
@@ -162,9 +152,7 @@ bool lz4_get_uncompressed_length(const char *input, size_t length,
     size_t src_size = length;
     size_t ret = LZ4F_getFrameInfo(ctx, &info, input, &src_size);
     LZ4F_freeDecompressionContext(ctx);
-    if (LZ4F_isError(ret) || info.contentSize == 0) {
-        return false;
-    }
+    if (LZ4F_isError(ret) || info.contentSize == 0) { return false; }
     *result = static_cast<size_t>(info.contentSize);
     return true;
 }
@@ -181,9 +169,7 @@ bool lz4_compress(const char *input, size_t length, std::string *output,
     output->resize(bound);
     size_t outlen =
         LZ4F_compressFrame(&(*output)[0], bound, input, length, &prefs);
-    if (LZ4F_isError(outlen)) {
-        return false;
-    }
+    if (LZ4F_isError(outlen)) { return false; }
     output->resize(outlen);
     return true;
 #else
@@ -198,9 +184,7 @@ bool lz4_compress(const char *input, size_t length, std::string *output,
 bool lz4_uncompress(const char *input, size_t length, char *output) {
 #if HAS_LZ4
     size_t outlen = 0;
-    if (!lz4_get_uncompressed_length(input, length, &outlen)) {
-        return false;
-    }
+    if (!lz4_get_uncompressed_length(input, length, &outlen)) { return false; }
 
     LZ4F_dctx *ctx = nullptr;
     if (LZ4F_isError(LZ4F_createDecompressionContext(&ctx, LZ4F_VERSION))) {
@@ -211,9 +195,7 @@ bool lz4_uncompress(const char *input, size_t length, char *output) {
     size_t ret =
         LZ4F_decompress(ctx, output, &dst_size, input, &src_size, nullptr);
     LZ4F_freeDecompressionContext(ctx);
-    if (LZ4F_isError(ret) || ret != 0) {
-        return false;
-    }
+    if (LZ4F_isError(ret) || ret != 0) { return false; }
     return true;
 #else
     (void)input;
@@ -228,9 +210,7 @@ bool lz4_uncompress(const char *input, size_t length, char *output) {
 bool zlib_get_uncompressed_length(const char *input, size_t length,
                                   size_t *result) {
 #if HAS_ZLIB
-    if (length < sizeof(uint32_t)) {
-        return false;
-    }
+    if (length < sizeof(uint32_t)) { return false; }
     *result = decode_fixed_32(input);
     return true;
 #else
@@ -252,9 +232,7 @@ bool zlib_compress(const char *input, size_t length, std::string *output,
     int ret = compress2(reinterpret_cast<Bytef *>(&(*output)[sizeof(uint32_t)]),
                         &outlen, reinterpret_cast<const Bytef *>(input),
                         static_cast<uLong>(length), level);
-    if (ret != Z_OK) {
-        return false;
-    }
+    if (ret != Z_OK) { return false; }
     output->resize(sizeof(uint32_t) + outlen);
     return true;
 #else
@@ -269,17 +247,13 @@ bool zlib_compress(const char *input, size_t length, std::string *output,
 bool zlib_uncompress(const char *input, size_t length, char *output) {
 #if HAS_ZLIB
     size_t outlen = 0;
-    if (!zlib_get_uncompressed_length(input, length, &outlen)) {
-        return false;
-    }
+    if (!zlib_get_uncompressed_length(input, length, &outlen)) { return false; }
     uLongf dst_len = static_cast<uLongf>(outlen);
     int ret =
         uncompress(reinterpret_cast<Bytef *>(output), &dst_len,
                    reinterpret_cast<const Bytef *>(input + sizeof(uint32_t)),
                    static_cast<uLong>(length - sizeof(uint32_t)));
-    if (ret != Z_OK) {
-        return false;
-    }
+    if (ret != Z_OK) { return false; }
     return true;
 #else
     (void)input;
@@ -313,18 +287,13 @@ Compressor new_zlib_compressor() {
 
 Compressor new_compressor(CompressionType type) {
     switch (type) {
-    case CompressionType::Snappy:
-        return new_snappy_compressor();
-    case CompressionType::Zstd:
-        return new_zstd_compressor();
-    case CompressionType::Lz4:
-        return new_lz4_compressor();
-    case CompressionType::Zlib:
-        return new_zlib_compressor();
+    case CompressionType::Snappy: return new_snappy_compressor();
+    case CompressionType::Zstd: return new_zstd_compressor();
+    case CompressionType::Lz4: return new_lz4_compressor();
+    case CompressionType::Zlib: return new_zlib_compressor();
     case CompressionType::None:
-    default:
-        return Compressor{};
+    default: return Compressor{};
     }
 }
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

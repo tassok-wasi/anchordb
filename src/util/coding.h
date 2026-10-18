@@ -22,11 +22,15 @@
 
 namespace ANCHORDB_NAMESPACE {
 
+// Writes a 16-bit unsigned integer to dst in little-endian byte order.
+void encode_fixed_16(char *dst, uint16_t vlaue);
 // Writes a 32-bit unsigned integer to dst in little-endian byte order.
 void encode_fixed_32(char *dst, uint32_t value);
 // Writes a 64-bit unsigned integer to dst in little-endian byte order.
 void encode_fixed_64(char *dst, uint64_t value);
 
+// Reads a 16-bit unsigned integer from ptr (little-endian).
+uint16_t decode_fixed_16(const char *ptr);
 // Reads a 32-bit unsigned integer from ptr (little-endian).
 uint32_t decode_fixed_32(const char *ptr);
 // Reads a 64-bit unsigned integer from ptr (little-endian).
@@ -87,4 +91,4 @@ void put_len_prefixed_slice(std::string *dst, std::string_view value);
 // Returns false if the input is truncated.
 bool get_len_prefixed_slice(std::string_view *input, std::string_view *result);
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

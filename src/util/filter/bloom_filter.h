@@ -14,13 +14,13 @@
 
 #pragma once
 
+#include "anchordb/anchordb_namespace.h"
 #include "anchordb/filter.h"
 #include "util/hash.h"
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
-#include "anchordb/anchordb_namespace.h"
 
 namespace ANCHORDB_NAMESPACE {
 
@@ -50,14 +50,12 @@ inline Filter new_bloom_filter(size_t bits_per_key) {
     size_t bits_per_key_ = (bits_per_key > 0) ? bits_per_key : 10;
     // k = bits_per_key * ln(2)  ≈  bits_per_key * 0.69
     size_t k_ = static_cast<size_t>(static_cast<double>(bits_per_key_) * 0.69);
-    if (k_ < 1)
-        k_ = 1;
-    if (k_ > 30)
-        k_ = 30;
+    if (k_ < 1) k_ = 1;
+    if (k_ > 30) k_ = 30;
     auto *state = new BloomFilterState{bits_per_key_, k_};
 
     return Filter{&state, &bloom_name, &bloom_create, &bloom_match,
                   &bloom_destroy};
 }
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

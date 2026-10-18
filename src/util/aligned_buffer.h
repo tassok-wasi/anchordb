@@ -80,9 +80,7 @@ class AlignedBuffer {
         assert((alignment_ & (alignment_ - 1)) == 0);
 
         copy_len = copy_len > 0 ? copy_len : cursize_;
-        if (copy_data && req_capacity < copy_len) {
-            return;
-        }
+        if (copy_data && req_capacity < copy_len) { return; }
         size_t new_capacity = round_up(req_capacity, alignment_);
 
         void *raw_ptr = nullptr;
@@ -105,9 +103,7 @@ class AlignedBuffer {
         capacity_ = new_capacity;
         bufstart_ = new_bufstart;
 
-        if (old_buf) {
-            free_aligned(static_cast<void *>(old_buf));
-        }
+        if (old_buf) { free_aligned(static_cast<void *>(old_buf)); }
     }
 
     size_t append(const char *src, size_t size) {
@@ -128,9 +124,7 @@ class AlignedBuffer {
         if (offset < cursize_) {
             to_read = std::min(cursize_ - offset, read_size);
         }
-        if (to_read > 0) {
-            memcpy(dest, bufstart_ + offset, to_read);
-        }
+        if (to_read > 0) { memcpy(dest, bufstart_ + offset, to_read); }
         return to_read;
     }
 
@@ -155,7 +149,7 @@ class AlignedBuffer {
         assert((alignment_ & (alignment_ - 1)) == 0);
 
         void *raw_ptr = nullptr;
-        if (alloc_aligned(&raw_ptr, alignment_, capacity_) != 0) {
+        if (alloc_aligned(&raw_ptr, capacity_, alignment_) != 0) {
             bufstart_ = nullptr;
             capacity_ = 0;
             return;
@@ -173,4 +167,4 @@ class AlignedBuffer {
     }
 };
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

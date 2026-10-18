@@ -29,6 +29,6 @@ struct ANCHORDB_EXPORT Comparator {
     void (*find_short_successor)(std::string *key) = nullptr;
 };
 
-inline ANCHORDB_EXPORT const Comparator new_byte_wise_comparator();
+ANCHORDB_EXPORT const Comparator new_byte_wise_comparator();
 
 } // namespace anchordb

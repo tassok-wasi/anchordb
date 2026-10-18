@@ -56,9 +56,7 @@ class ThreadPool {
     // falls back to default_thread_count().
     explicit ThreadPool(size_t thread_count = default_thread_count())
         : stop_(false), active_workers_(0) {
-        if (thread_count == 0) {
-            thread_count = default_thread_count();
-        }
+        if (thread_count == 0) { thread_count = default_thread_count(); }
 
         workers_.reserve(thread_count);
         for (size_t i = 0; i < thread_count; ++i) {
@@ -116,9 +114,7 @@ class ThreadPool {
     // C-style function pointer overload.
     // Returns false if `function` is null or the pool is shutting down.
     bool enqueue(void (*function)(void *), void *arg) {
-        if (function == nullptr) {
-            return false;
-        }
+        if (function == nullptr) { return false; }
         return enqueue([function, arg]() { function(arg); });
     }
 
@@ -157,9 +153,7 @@ class ThreadPool {
                 std::unique_lock<std::mutex> lock(queue_mutex_);
                 cv_.wait(lock, [this] { return stop_ || !tasks_.empty(); });
 
-                if (stop_ && tasks_.empty()) {
-                    return;
-                }
+                if (stop_ && tasks_.empty()) { return; }
 
                 task = std::move(tasks_.front());
                 tasks_.pop();
@@ -178,9 +172,7 @@ class ThreadPool {
     }
 
     void join_workers() noexcept {
-        for (NativeThreadHandle handle : workers_) {
-            thread_join(handle);
-        }
+        for (NativeThreadHandle handle : workers_) { thread_join(handle); }
     }
 
     std::vector<NativeThreadHandle> workers_;
@@ -191,4 +183,4 @@ class ThreadPool {
     std::atomic<size_t> active_workers_;
 };
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

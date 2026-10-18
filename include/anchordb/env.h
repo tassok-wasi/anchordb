@@ -217,4 +217,4 @@ class ANCHORDB_EXPORT EnvWrapper : public Env {
     Env *target_;
 };
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

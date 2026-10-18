@@ -35,8 +35,16 @@ enum class ANCHORDB_EXPORT MapType {
     Swiss = 0x2,
 };
 
+// Selects which cache policy implementation from src/cache/ backs the
+// table cache.
+enum class ANCHORDB_EXPORT CacheType {
+    LRU = 0x0,
+    LIRS = 0x1,
+    ClockPro = 0x2,
+};
+
 struct ANCHORDB_EXPORT Options {
-    Options();
+    Options() = default;
 
     bool create_if_mission = false;
     bool error_if_exists = false;
@@ -47,12 +55,16 @@ struct ANCHORDB_EXPORT Options {
     int max_open_files = 1000;
     MapType active_map = MapType::Swiss;
     Cache *block_cache = nullptr;
+    // Open-table cache: capacity in bytes and the cache policy used to
+    // implement it (see TableCache).
+    size_t table_cache_size = 8 * 1024 * 1024;
+    CacheType table_cache_type = CacheType::LRU;
     size_t block_size = 4 * 1024;
-    int block_restart_interval = 16;
+    // int block_restart_interval = 16;
     size_t max_file_size = 2 * 1024 * 1024;
-    CompressionType active_compression_type = CompressionType::Snappy;
+    // CompressionType active_compression_type = CompressionType::Snappy;
     FilterType active_filter_type = FilterType::Bloom;
-    int zstd_compression_level = 1;
+    // int zstd_compression_level = 1;
     bool reuse_logs = false;
     Comparator comparator = Comparator{};
     Compressor compressor = Compressor{};
@@ -70,4 +82,4 @@ struct ANCHORDB_EXPORT WriteOptions {
     bool sync = false;
 };
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

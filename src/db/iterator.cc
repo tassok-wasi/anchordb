@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
-
+#include "anchordb/iterator.h"
 #include "anchordb/anchordb_namespace.h"
 
-namespace ANCHORDB_NAMESPACE {} // #include "anchordb/anchordb_namespace.h"
+namespace ANCHORDB_NAMESPACE {
 
-namespace ANCHORDB_NAMESPACE
+Iterator::Iterator() = default;
+Iterator::~Iterator() = default;
+
+} // namespace ANCHORDB_NAMESPACE

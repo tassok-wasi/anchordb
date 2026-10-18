@@ -15,6 +15,7 @@
 #pragma once
 
 #include <anchordb/export.h>
+#include <string>
 #include <string_view>
 
 #include "anchordb/anchordb_namespace.h"
@@ -70,6 +71,17 @@ class ANCHORDB_EXPORT Status {
         return Status(Code::IoError, msg, msg2);
     }
 
+    // Return error status of an appropriate type.
+    static Status not_found(const std::string &msg,
+                            const std::string &msg2 = "") {
+        return Status(Code::NotFound, msg, msg2);
+    }
+
+    static Status io_error(const std::string &msg,
+                           const std::string &msg2 = "") {
+        return Status(Code::IoError, msg, msg2);
+    }
+
     // Returns true iff the status indicates success.
     bool is_ok() const { return (state_ == nullptr); }
 
@@ -117,4 +129,4 @@ class ANCHORDB_EXPORT Status {
     const char *state_;
 };
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

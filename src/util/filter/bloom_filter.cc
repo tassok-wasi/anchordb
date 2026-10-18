@@ -12,21 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "bloom_filter.h"
 #include "anchordb/anchordb_namespace.h"
+#include "bloom_filter.h"
 
 namespace ANCHORDB_NAMESPACE {
 
 void bloom_create(const void *state_ptr, const std::string_view *keys, size_t n,
                   std::string *dst) {
-    if (n == 0)
-        return;
+    if (n == 0) return;
 
     auto *state = static_cast<const BloomFilterState *>(state_ptr);
 
     size_t bits = n * state->bits_per_key;
-    if (bits < 64)
-        bits = 64;
+    if (bits < 64) bits = 64;
 
     const size_t bytes = (bits + 7) / 8;
     bits = bytes * 8; // round up to byte boundary
@@ -51,8 +49,7 @@ void bloom_create(const void *state_ptr, const std::string_view *keys, size_t n,
 bool bloom_match(const void *state_ptr, std::string_view key,
                  std::string_view bloom_filter) {
     const size_t len = bloom_filter.size();
-    if (len < 2)
-        return false;
+    if (len < 2) return false;
 
     const char *array = bloom_filter.data();
     const size_t bits = (len - 1) * 8;
@@ -74,4 +71,4 @@ bool bloom_match(const void *state_ptr, std::string_view key,
     return true;
 }
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

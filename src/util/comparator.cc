@@ -71,4 +71,4 @@ const Comparator new_byte_wise_comparator() {
                       &byte_wise_find_short_successor};
 }
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

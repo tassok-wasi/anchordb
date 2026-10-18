@@ -261,4 +261,4 @@ uint64_t murmurhash3_64(std::string_view slice, uint64_t seed) {
     return h1;
 }
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

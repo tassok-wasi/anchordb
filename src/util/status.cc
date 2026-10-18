@@ -56,24 +56,12 @@ std::string Status::to_str() const {
         char tmp[30];
         const char *type;
         switch (code()) {
-        case Code::Ok:
-            type = "OK";
-            break;
-        case Code::NotFound:
-            type = "NotFound: ";
-            break;
-        case Code::Corruption:
-            type = "Corruption: ";
-            break;
-        case Code::NotSupported:
-            type = "Not implemented: ";
-            break;
-        case Code::InvalidArgument:
-            type = "Invalid argument: ";
-            break;
-        case Code::IoError:
-            type = "IO error: ";
-            break;
+        case Code::Ok: type = "OK"; break;
+        case Code::NotFound: type = "NotFound: "; break;
+        case Code::Corruption: type = "Corruption: "; break;
+        case Code::NotSupported: type = "Not implemented: "; break;
+        case Code::InvalidArgument: type = "Invalid argument: "; break;
+        case Code::IoError: type = "IO error: "; break;
         default:
             std::snprintf(tmp, sizeof(tmp),
                           "Unknown code(%d): ", static_cast<int>(code()));
@@ -88,4 +76,4 @@ std::string Status::to_str() const {
     }
 }
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

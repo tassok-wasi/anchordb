@@ -52,9 +52,7 @@ class Random {
         // The first reduction can overflow by a single bit, so a second
         // correction may be required. The result can never equal the modulus,
         // so a strict ">" comparison is sufficient.
-        if (reduced > k_modulus) {
-            reduced -= k_modulus;
-        }
+        if (reduced > k_modulus) { reduced -= k_modulus; }
         state_ = reduced;
         return state_;
     }
@@ -66,17 +64,13 @@ class Random {
     // REQUIRES: n > 0
     uint32_t uniform(uint32_t n) {
         assert(n > 0);
-        if (n == 0) {
-            return 0;
-        }
+        if (n == 0) { return 0; }
 
         // A single draw cannot cover a range wider than the generator's own
         // range, so rejection sampling would never terminate. Fall back to a
         // modulo reduction; the resulting bias is negligible for such large n
         // (the only power-of-two case is n == 2^31).
-        if (n > k_max_next) {
-            return next() % n;
-        }
+        if (n > k_max_next) { return next() % n; }
 
         // Plain "next() % n" is biased whenever n does not divide the
         // generator's range. Reject the tail of the range so that only a whole
@@ -112,9 +106,7 @@ class Random {
         }
 
         const uint32_t bits = uniform(static_cast<uint32_t>(max_log) + 1);
-        if (bits == 0) {
-            return 0;
-        }
+        if (bits == 0) { return 0; }
         return uniform(1u << bits);
     }
 
@@ -131,4 +123,4 @@ class Random {
     uint32_t state_;
 };
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE
