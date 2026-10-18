@@ -17,7 +17,6 @@
 #include <string>
 
 #include "anchordb/compressor.h"
-#include "anchordb/options.h"
 #include "port/port.h" // IWYU pragma: keep
 #include "util/coding.h"
 
