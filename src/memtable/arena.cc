@@ -17,7 +17,9 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 Arena::Arena(const uint32_t block_size)
     : k_block_size_(block_size), alloc_ptr_{nullptr}, alloc_bytes_remaining_{0},

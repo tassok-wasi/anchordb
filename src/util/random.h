@@ -17,7 +17,9 @@
 #include <cassert>
 #include <cstdint>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 // A small, deterministic pseudo-random number generator built on the
 // Park-Miller "minimal standard" linear congruential generator:

@@ -17,7 +17,9 @@
 #include "anchordb/status.h"
 #include <string_view>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 class WritableFileWriter;
 

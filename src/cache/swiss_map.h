@@ -20,7 +20,9 @@
 #include <cstdint>
 #include <vector>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 template <typename T> class SwissMap {
   public:

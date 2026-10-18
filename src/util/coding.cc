@@ -15,7 +15,9 @@
 #include "coding.h"
 #include <cstdint>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 // Encodes a 32-bit unsigned integer in little-endian byte order.
 // Writes exactly 4 bytes to dst.

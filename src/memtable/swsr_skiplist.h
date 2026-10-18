@@ -19,7 +19,9 @@
 #include <random>
 #include <string_view>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 template <typename Key, class Comparator> class Skiplist_SWSR {
   private:

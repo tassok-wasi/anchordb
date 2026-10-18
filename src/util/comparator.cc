@@ -19,7 +19,9 @@
 #include <cstdint>
 #include <string_view>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 namespace {
 int byte_wise_compare(std::string_view a, std::string_view b) {

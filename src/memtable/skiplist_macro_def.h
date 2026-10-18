@@ -33,7 +33,9 @@
     "No memtable skiplist implementation selected. Define one of: MWMR_MEMTABLE_SKIPLIST, SWMR_MEMTABLE_SKIPLIST, or SWSR_MEMTABLE_SKIPLIST"
 #endif
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 #if defined(MWMR_MEMTABLE_SKIPLIST)
 template <typename Key, class Comparator>

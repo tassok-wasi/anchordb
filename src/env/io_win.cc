@@ -24,7 +24,9 @@
 #endif
 #include <windows.h>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 Status win_error(const std::string &context, DWORD error_number) {
     if (error_number == ERROR_FILE_NOT_FOUND ||

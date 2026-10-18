@@ -18,7 +18,9 @@
 #include <string>
 #include <string_view>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 // Writes a 32-bit unsigned integer to dst in little-endian byte order.
 void encode_fixed_32(char *dst, uint32_t value);

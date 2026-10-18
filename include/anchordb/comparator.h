@@ -17,7 +17,9 @@
 #include "anchordb/export.h"
 #include <string>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 struct ANCHORDB_EXPORT Comparator {
     int (*compare)(std::string_view a, std::string_view b) = nullptr;

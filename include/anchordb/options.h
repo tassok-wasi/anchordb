@@ -20,7 +20,9 @@
 #include "anchordb/filter.h"
 #include <cstddef>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 class Cache;
 class Env;

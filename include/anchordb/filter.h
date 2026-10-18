@@ -18,7 +18,9 @@
 #include <cstddef>
 #include <string>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 enum class FilterType { Bloom = 0x0, Cuckoo = 0x1, Ribbon = 0x2 };
 

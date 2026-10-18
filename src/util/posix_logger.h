@@ -23,7 +23,9 @@
 #include <string>
 #include <thread>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 // A Logger that appends timestamped, thread-tagged entries to a POSIX file
 // stream. Every entry is emitted as a single line and flushed immediately so

@@ -28,7 +28,9 @@
 #endif
 #include <windows.h>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 WinEnv::WinEnv() : WinEnv(1000, true) {}
 

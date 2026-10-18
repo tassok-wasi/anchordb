@@ -17,7 +17,9 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 // Extends a running CRC32 checksum with additional data.
 // `crc` is the initial CRC value (typically 0 or a previously computed CRC).

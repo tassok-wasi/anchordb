@@ -18,7 +18,9 @@
 #include "anchordb/status.h"
 #include <string_view>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 // A bidirectional iterator over an ordered key-value store. Keys are
 // returned in ascending order, and the same iterator may not be used

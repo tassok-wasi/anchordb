@@ -20,7 +20,9 @@
 #include <string>
 #include <string_view>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 const char *Status::copy_state(const char *state) {
     uint32_t size;

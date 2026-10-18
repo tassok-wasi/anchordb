@@ -20,7 +20,9 @@
 #include "port/port.h" // IWYU pragma: keep
 #include "util/coding.h"
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 namespace {
 

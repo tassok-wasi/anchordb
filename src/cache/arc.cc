@@ -15,7 +15,9 @@
 #include "arc.h"
 #include <string_view>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 void ARCCache::remove_ghost_(ARCHandle *e) {
     HashedKey k{e->key(), e->hash};

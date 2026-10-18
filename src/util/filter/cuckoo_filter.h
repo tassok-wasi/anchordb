@@ -20,7 +20,9 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 // Shared constants so the free matching function can use them without
 // reaching into the class.

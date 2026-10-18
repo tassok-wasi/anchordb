@@ -16,7 +16,9 @@
 
 #include <string>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 class SequentialFileReader;
 

@@ -30,7 +30,9 @@
 #endif
 #include <windows.h>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 // WinEnv is the Windows-specific implementation of the environment abstraction.
 // It provides file I/O, locking, scheduling, and timing utilities via IOCP

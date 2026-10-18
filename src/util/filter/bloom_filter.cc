@@ -13,7 +13,9 @@
 // limitations under the License.
 
 #include "bloom_filter.h"
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 void bloom_create(const void *state_ptr, const std::string_view *keys, size_t n,
                   std::string *dst) {

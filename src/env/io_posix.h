@@ -28,7 +28,9 @@
 #include <string_view>
 #include <unistd.h>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 constexpr const size_t k_writable_file_buf_size = 65536;           // 64KB
 constexpr const size_t k_seq_file_reader_buf_size = 4194304;       // 4MB

@@ -17,7 +17,9 @@
 #include <anchordb/export.h>
 #include <string_view>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 class ANCHORDB_EXPORT Status {
   public:
     // Create a success status.

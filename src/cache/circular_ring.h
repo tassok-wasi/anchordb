@@ -19,7 +19,9 @@
 #include <cassert>
 #include <cstddef>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 class CircularRing {
   public:

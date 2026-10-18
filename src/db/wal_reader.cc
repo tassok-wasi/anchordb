@@ -19,7 +19,9 @@
 #include "util/crc32.h"
 #include <cstdint>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 WALReader::WALReader(SequentialFileReader *reader) : reader_(reader) {}
 

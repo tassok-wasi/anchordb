@@ -19,7 +19,9 @@
 #include <cassert>
 #include <string_view>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 class IteratorWrapper {
   public:

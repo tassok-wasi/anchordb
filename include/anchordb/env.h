@@ -23,7 +23,9 @@
 #include <string_view>
 #include <vector>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 class FileLock;
 class Logger;

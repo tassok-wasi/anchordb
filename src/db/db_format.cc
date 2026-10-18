@@ -19,7 +19,9 @@
 #include <cstdint>
 #include <cstring>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 // Decodes the trailing 8 bytes of an internal key into sequence number and
 // value type. Layout: | user_key (n-8 bytes) | sequence (7 bytes, big-endian) |

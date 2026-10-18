@@ -20,7 +20,9 @@
 #include <cstdint>
 #include <string_view>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 class ANCHORDB_EXPORT Cache {
   public:

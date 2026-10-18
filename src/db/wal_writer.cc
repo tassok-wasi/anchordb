@@ -18,7 +18,9 @@
 #include "util/coding.h"
 #include "util/crc32.h"
 #include <cstdint>
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 WALWriter::WALWriter(WritableFileWriter *dest) : dest_(dest) {}
 

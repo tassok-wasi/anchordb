@@ -20,7 +20,9 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 namespace {
 inline uint32_t bloom_hash(std::string_view key) {

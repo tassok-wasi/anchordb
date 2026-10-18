@@ -14,7 +14,9 @@
 
 #include "lirs.h"
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 Cache::Handle *LIRSCache::insert(std::string_view key, uint64_t hash,
                                  void *value, size_t charge,

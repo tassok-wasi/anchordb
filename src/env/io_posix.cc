@@ -22,7 +22,9 @@
 #include <liburing.h>
 #include <unistd.h>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 Status posix_error(const std::string &context, int error_number) {
     if (error_number == ENOENT) {

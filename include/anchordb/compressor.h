@@ -17,7 +17,9 @@
 #include "anchordb/export.h"
 #include <cstddef>
 #include <string>
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 enum class ANCHORDB_EXPORT CompressionType {
     None = 0x0,

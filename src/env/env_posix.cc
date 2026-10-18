@@ -25,7 +25,9 @@
 #include <system_error>
 #include <thread>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 PosixEnv::PosixEnv() : PosixEnv(1000, 256, true) {}
 

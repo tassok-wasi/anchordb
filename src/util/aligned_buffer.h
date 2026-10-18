@@ -23,7 +23,9 @@
 #include <cstdlib>
 #include <cstring>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 inline size_t round_up(size_t x, size_t y) { return ((x + y - 1) / y) * y; }
 inline size_t round_down(size_t x, size_t y) { return (x / y) * y; }

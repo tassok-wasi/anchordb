@@ -25,7 +25,9 @@
 #include <string>
 #include <string_view>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 void BlockHandle::encode_to(std::string *dst) const {
     // Sanity check that all fields have been set

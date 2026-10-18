@@ -34,7 +34,9 @@
 #include <cstddef>
 #include <string_view>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 BlockBuilder::BlockBuilder(const Options *options)
     : options_(options), restarts_(), counter_(0), finished_(false) {

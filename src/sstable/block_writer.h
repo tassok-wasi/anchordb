@@ -14,6 +14,8 @@
 
 #pragma once
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
     
 }

@@ -15,7 +15,9 @@
 #include "circular_ring.h"
 #include <cassert>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 CircularRing::CircularRing(CircularRing &&other) noexcept
     : head_(other.head_), index_map_(std::move(other.index_map_)),

@@ -20,7 +20,9 @@
 #include <cstdint>
 #include <string_view>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 // Generate new filter every 2KB of data
 static const size_t kFilterBaseLg = 11;

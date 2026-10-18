@@ -18,7 +18,9 @@
 #include <cstdint>
 #include <string_view>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 uint32_t murmurhash2_32(const char *data, size_t n, uint32_t seed);
 uint64_t xx_hash64(std::string_view slice, uint64_t seed = 0);

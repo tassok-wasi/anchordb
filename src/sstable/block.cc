@@ -22,7 +22,9 @@
 #include <cstdint>
 #include <string_view>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 inline uint32_t Block::num_restarts() const {
     assert(size_ >= sizeof(uint32_t));

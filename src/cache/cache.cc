@@ -14,7 +14,9 @@
 
 #include "anchordb/cache.h"
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 Cache::~Cache() = default;
 

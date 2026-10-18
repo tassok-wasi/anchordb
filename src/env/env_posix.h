@@ -31,7 +31,9 @@
 #include <unistd.h>
 #include <vector>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 // Common flags defined for all posix open operations
 #if defined(HAS_O_CLOEXEC)

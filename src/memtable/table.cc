@@ -14,7 +14,9 @@
 
 #include "memtable/table.h"
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 void MemTable::add(seq_num seq, ValueType type, std::string_view key,
                    std::string_view value) {

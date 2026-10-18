@@ -23,7 +23,9 @@
 #include <string>
 #include <string_view>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 // Distinguishes a live key-value entry from a tombstone (deletion marker).
 // Encoded as the low byte of the 8-byte trailer in an internal key.

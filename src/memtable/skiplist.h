@@ -21,7 +21,9 @@
 #include <cstddef>
 #include <string_view>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 // previously as `Skiplist_SWMR`. options for multiple variant of skiplist will
 // be removed in the future.

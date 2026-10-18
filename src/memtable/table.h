@@ -26,7 +26,9 @@
 #include <string_view>
 #include <utility>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 inline std::string_view get_len_prefixed_slice(const char *data) {
     uint32_t len;

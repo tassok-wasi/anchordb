@@ -15,7 +15,9 @@
 #include "cuckoo_filter.h"
 #include <string_view>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 void cuckoo_create(const void *state_ptr, const std::string_view *keys,
                    size_t n, std::string *dst) {

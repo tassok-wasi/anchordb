@@ -21,7 +21,9 @@
 #include <string>
 #include <string_view>
 #include <vector>
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 void ribbon_create(const void *state_ptr, const std::string_view *keys,
                    size_t n, std::string *dst) {

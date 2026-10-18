@@ -32,7 +32,9 @@
 #include <variant>
 #include <vector>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 class ARCCache {
   public:

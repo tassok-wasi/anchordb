@@ -20,7 +20,9 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 // Ribbon-filter constants shared with the free matching function.
 inline constexpr size_t k_ribbon_width = 64; // coefficient width in bits

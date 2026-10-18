@@ -26,7 +26,9 @@
 #include <utility>
 #include <vector>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 // A fixed-size pool of worker threads that execute queued tasks.
 //

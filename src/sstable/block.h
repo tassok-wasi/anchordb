@@ -19,7 +19,9 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace anchordb {
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
 
 struct BlockContents;
 
