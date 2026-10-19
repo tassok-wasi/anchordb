@@ -34,13 +34,14 @@ namespace ANCHORDB_NAMESPACE {
     |   - free_space_boundary (2 Bytes): Byte offset marking the boundary where backward payload begins      |
     +--------------------------------------------------------------------------------------------------------+
     | [FORWARD FIXED-SIZE SLOTS ARRAY (Grows forward from byte offset 4)]                                    |
-    |   - Slot 0: [key_local_offset (2B) | value_type (1B) | value_flag (1B) | data_global_offset (8B)]      |
-    |   - Slot 1: [key_local_offset (2B) | value_type (1B) | value_flag (1B) | data_global_offset (8B)]      |
-    |   - Slot N: Totaling 12 bytes per slot. Fits exactly 5-6 slots per 64-byte CPU cache line.             |
+    |   - Slot 0: [key_local_offset (2B) | value_type (1B) | value_flag (1B) | data_size (4B) | data_global_offset (8B)] |
+    |   - Slot 1: [key_local_offset (2B) | value_type (1B) | value_flag (1B) | data_size (4B) | data_global_offset (8B)] |
+    |   - Slot N: Totaling 16 bytes per slot. Fits exactly 4 slots per 64-byte CPU cache line.              |
     |                                                                                                        |
     |       Field Metadata Definitions:                                                                      |
     |         - value_type (1B): [0x1 = Value] | [0x0 = Tombstone]                                           |
     |         - value_flag (1B): [0x1 = Inline in data.bin] | [0x0 = Pointer to vLog]                        |
+    |         - data_size  (4B): Total encoded layout size of the referenced data record in data.bin         |
     +--------------------------------------------------------------------------------------------------------+
     |                                  ... UNUSED BLOCK SPACE ...                                            |
     +--------------------------------------------------------------------------------------------------------+
@@ -102,16 +103,14 @@ bool IndexBlockWriter::add(std::string_view key, ValueHandle handle,
 
     // Fixed-size slot grows up from the header.
     char *slot = buffer_ + forward_end;
-    encode_fixed_16(slot, static_cast<uint16_t>(new_boundary)); // key offset
-    slot += sizeof(uint16_t);
-    // Byte order matches the documented layout: value_type byte first, then
-    // value_flag.
-    const uint16_t value_meta =
-        static_cast<uint16_t>((static_cast<uint16_t>(handle.flag) << 8) |
-                              static_cast<uint16_t>(handle.type));
-    encode_fixed_16(slot, value_meta);
-    slot += sizeof(uint16_t);
-    encode_fixed_64(slot, handle.offset);
+    encode_fixed_16(slot + kSlotKeyOffsetOff,
+                    static_cast<uint16_t>(new_boundary)); // key offset
+    // Byte order matches the documented layout: value_type, value_flag,
+    // data_size, then data_global_offset.
+    slot[kSlotTypeOff] = static_cast<char>(static_cast<uint8_t>(handle.type));
+    slot[kSlotFlagOff] = static_cast<char>(static_cast<uint8_t>(handle.flag));
+    encode_fixed_32(slot + kSlotDataSizeOff, handle.data_size);
+    encode_fixed_64(slot + kSlotGlobalOffsetOff, handle.offset);
 
     ++slot_count_;
     return true;

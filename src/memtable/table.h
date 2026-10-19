@@ -30,6 +30,7 @@
 
 namespace ANCHORDB_NAMESPACE {
 
+// Decodes a length-prefixed slice: varint32 length followed by the payload.
 inline std::string_view get_len_prefixed_slice(const char *data) {
     uint32_t len;
     const char *p = data;
@@ -37,6 +38,7 @@ inline std::string_view get_len_prefixed_slice(const char *data) {
     return std::string_view(p, len);
 }
 
+// Encodes `target` into `scratch` as a length-prefixed slice.
 inline char *encode_key(std::string *scratch, std::string_view target) {
     scratch->clear();
     put_varint_32(scratch, target.size());
@@ -44,6 +46,7 @@ inline char *encode_key(std::string *scratch, std::string_view target) {
     return scratch->data();
 }
 
+// Compares two length-prefixed keys using the underlying user comparator.
 struct KeyComparator {
     const Comparator comparator;
     explicit KeyComparator(const Comparator &c) : comparator(c) {}
@@ -56,6 +59,7 @@ struct KeyComparator {
 
 using Table = Skiplist<const char *, KeyComparator>;
 
+// Iterator over a memtable's skiplist, decoding length-prefixed keys/values.
 class MemtableIterator : public Iterator {
   public:
     explicit MemtableIterator(Table *table) : iter_(table) {}
@@ -85,6 +89,7 @@ class MemtableIterator : public Iterator {
         return get_len_prefixed_slice(iter_.key());
     }
     std::string_view value() const override {
+        // Value follows the key in the same length-prefixed entry.
         std::string_view key_slice = get_len_prefixed_slice(iter_.key());
         return get_len_prefixed_slice(key_slice.data() + key_slice.size());
     }
@@ -92,9 +97,10 @@ class MemtableIterator : public Iterator {
 
   private:
     typename Table::Iterator iter_;
-    std::string tmp_;
+    std::string tmp_; // scratch buffer for seek key encoding
 };
 
+// In-memory table backed by a skiplist and arena allocator.
 class MemTable {
   public:
     explicit MemTable(const Comparator comparator,
@@ -106,13 +112,12 @@ class MemTable {
     MemTable(const MemTable &) = delete;
     MemTable &operator=(const MemTable &) = delete;
 
+    // Reference counting for shared ownership.
     void ref() { ++refs_; }
     void unref() {
         --refs_;
         assert(refs_ >= 0);
-        if (refs_ <= 0) {
-            delete this;
-        }
+        if (refs_ <= 0) { delete this; }
     }
 
     size_t approximate_memory_usage() const { return arena_.memory_usage(); }
@@ -133,4 +138,4 @@ class MemTable {
     MemtableIterator iter_;
 };
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

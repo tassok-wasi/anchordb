@@ -84,9 +84,10 @@ class IndexTableBuilder {
     Status add(std::string_view key, const ValueHandle &handle,
                uint64_t timestamp);
 
-    // Convenience overload taking the handle fields directly.
+    // Convenience overload taking the handle fields directly.  `data_size` is
+    // the total encoded layout size of the referenced data record.
     Status add(std::string_view key, ValueType type, ValueFlag flag,
-               uint64_t data_offset, uint64_t timestamp);
+               uint64_t data_offset, uint32_t data_size, uint64_t timestamp);
 
     // Number of blocks already sealed and appended to the index buffer.
     size_t block_count() const { return block_count_; }

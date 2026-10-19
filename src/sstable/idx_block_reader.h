@@ -25,10 +25,12 @@
 namespace ANCHORDB_NAMESPACE {
 
 // Encoded size of the value returned by an index block iterator's value():
-//   [ value_type (1B) | value_flag (1B) | offset (8B) | timestamp (8B) ]
+//   [ value_type (1B) | value_flag (1B) | data_size (4B) | offset (8B) |
+//     timestamp (8B) ]
 // Decode it with IndexBlockReader::decode_value().
-inline constexpr size_t kIndexValueSize =
-    sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint64_t) + sizeof(uint64_t);
+inline constexpr size_t kIndexValueSize = sizeof(uint8_t) + sizeof(uint8_t) +
+                                          sizeof(uint32_t) + sizeof(uint64_t) +
+                                          sizeof(uint64_t);
 
 // A fully decoded index block entry.
 struct IndexBlockEntry {

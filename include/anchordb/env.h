@@ -46,6 +46,12 @@ class ANCHORDB_EXPORT Env {
 
     static Env *default_env();
 
+    // Overrides the environment returned by default_env(). Pass nullptr to
+    // clear the override and fall back to the platform default. The caller
+    // retains ownership and must keep |env| alive for as long as it is
+    // installed.
+    static void set_default_env(Env *env);
+
     virtual Status new_sequential_file_reader(const std::string &fname,
                                               SequentialFileReader **result,
                                               size_t buffer_size = 0) = 0;

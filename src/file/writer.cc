@@ -12,17 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "anchordb/anchordb_namespace.h"
 #include "writer.h"
+#include "anchordb/anchordb_namespace.h"
+#include "io_uring_config.h"
+#include "sync_io.h"
 #include <fcntl.h>
-#include <liburing.h>
 #include <unistd.h>
 
 namespace ANCHORDB_NAMESPACE {
 Status PosixWritableFileWriter::submit_write_(const char *src, size_t len,
                                               uint64_t offset) {
-    size_t total_written = 0;
+    // io_uring unavailable: use pwrite(2) at the explicit offset so the
+    // writer never depends on a shared file position.
+    if (ring_ == nullptr) {
+        return file_internal::sync_pwrite(filename_, fd_, src, len, offset);
+    }
 
+#if !HAS_IO_URING
+    return Status::not_supported(
+        std::string_view("io_uring support not compiled in"));
+#else
+    size_t total_written = 0;
     while (total_written < len) {
         struct io_uring_sqe *sqe = io_uring_get_sqe(ring_);
         if (!sqe) {
@@ -65,6 +75,7 @@ Status PosixWritableFileWriter::submit_write_(const char *src, size_t len,
     }
 
     return Status::ok();
+#endif
 }
 
 Status PosixWritableFileWriter::append(std::string_view data) {
@@ -82,6 +93,7 @@ Status PosixWritableFileWriter::append(std::string_view data) {
                 Status s = submit_write_(src, left, filesize_);
                 if (!s.is_ok()) return s;
                 filesize_ += left;
+                buf_offset_ = filesize_;
                 return Status::ok();
             }
         }
@@ -103,16 +115,18 @@ Status PosixWritableFileWriter::append(std::string_view data) {
 Status PosixWritableFileWriter::close() {
     Status s = flush_buffer();
 
-    if (direct_io_ && s.is_ok()) {
+    if (direct_io_ && s.is_ok() && fd_ >= 0) {
         if (::ftruncate(fd_, filesize_) < 0) {
             s = posix_error(filename_, errno);
         }
     }
 
     if (fd_ >= 0) {
-        if (::close(fd_) < 0 && s.is_ok()) {
-            s = posix_error(filename_, errno);
-        }
+        // Mark closed before the syscall so a second close() (for example
+        // from the destructor) is a no-op instead of closing a reused fd.
+        const int fd = fd_;
+        fd_ = -1;
+        if (::close(fd) < 0 && s.is_ok()) { s = posix_error(filename_, errno); }
     }
 
     return s;
@@ -121,6 +135,7 @@ Status PosixWritableFileWriter::close() {
 Status PosixWritableFileWriter::sync() {
     Status s = flush_buffer();
     if (!s.is_ok()) return s;
+    if (fd_ < 0) { return posix_error(filename_, EBADF); }
 
     if (::fdatasync(fd_) < 0) { return posix_error(filename_, errno); }
 
@@ -130,24 +145,85 @@ Status PosixWritableFileWriter::sync() {
 Status PosixWritableFileWriter::flush_buffer() {
     if (buf_.current_size() == 0) return Status::ok();
 
-    size_t bytes_to_write = buf_.current_size();
-    uint64_t write_offset = filesize_ - buf_.current_size();
+    const size_t logical_bytes = buf_.current_size();
 
-    if (direct_io_) {
-        size_t remainder = buf_.current_size() % k_o_direct_alignment;
-        if (remainder != 0) {
-            size_t padded_size =
-                buf_.current_size() + (k_o_direct_alignment - remainder);
-            std::memset(buf_.data() + buf_.current_size(), 0,
-                        k_o_direct_alignment - remainder);
-            bytes_to_write = padded_size;
+    if (!direct_io_) {
+        Status s = submit_write_(buf_.data(), logical_bytes, buf_offset_);
+        if (!s.is_ok()) return s;
+        buf_.clear();
+        buf_offset_ = filesize_;
+        return Status::ok();
+    }
+
+    // O_DIRECT requires both the file offset and the transfer length to be
+    // block-aligned. buf_offset_ is kept aligned (see the tail handling at the
+    // bottom); the one exception is the first write to an appendable file
+    // whose initial size is not aligned, handled with a read-modify-write of
+    // the leading partial block.
+    const char *written = buf_.data();
+    uint64_t write_offset = buf_offset_;
+    size_t write_len = logical_bytes;
+    AlignedBuffer lead_block;
+
+    if ((buf_offset_ % k_o_direct_alignment) != 0) {
+        const uint64_t aligned_start =
+            buf_offset_ & ~(static_cast<uint64_t>(k_o_direct_alignment) - 1);
+        const size_t leading = static_cast<size_t>(buf_offset_ - aligned_start);
+        const size_t total =
+            round_up(leading + logical_bytes, k_o_direct_alignment);
+
+        lead_block = AlignedBuffer(total, k_o_direct_alignment);
+        if (!lead_block.is_allocated()) {
+            return Status::io_error(std::string_view(
+                "Failed to allocate aligned buffer for O_DIRECT write"));
+        }
+
+        size_t got = 0;
+        Status s = file_internal::sync_pread(filename_, fd_, lead_block.data(),
+                                             total, aligned_start, &got);
+        if (!s.is_ok()) return s;
+        if (got < total) {
+            std::memset(lead_block.data() + got, 0, total - got);
+        }
+        std::memcpy(lead_block.data() + leading, buf_.data(), logical_bytes);
+        std::memset(lead_block.data() + leading + logical_bytes, 0,
+                    total - leading - logical_bytes);
+
+        s = submit_write_(lead_block.data(), total, aligned_start);
+        if (!s.is_ok()) return s;
+        written = lead_block.data() + leading;
+        write_offset = aligned_start;
+        write_len = total;
+    } else {
+        const size_t padded = round_up(logical_bytes, k_o_direct_alignment);
+        std::memset(buf_.data() + logical_bytes, 0, padded - logical_bytes);
+        Status s = submit_write_(buf_.data(), padded, buf_offset_);
+        if (!s.is_ok()) return s;
+        write_len = padded;
+    }
+
+    // The aligned write may have extended the file with padding. Trim it so the
+    // on-disk size always equals the logical size, keeping a reopen (and a
+    // crash after sync) from mistaking padding for data.
+    if (write_offset + write_len > filesize_) {
+        if (::ftruncate(fd_, static_cast<off_t>(filesize_)) < 0) {
+            return posix_error(filename_, errno);
         }
     }
 
-    Status s = submit_write_(buf_.data(), bytes_to_write, write_offset);
-    if (!s.is_ok()) return s;
+    // Retain the sub-block tail that belongs to the last (padded) block so the
+    // next flush can rewrite it at an aligned offset. This keeps the logical
+    // byte stream contiguous while never issuing an unaligned O_DIRECT write.
+    const size_t tail = static_cast<size_t>(filesize_ % k_o_direct_alignment);
+    if (tail != 0) {
+        std::memmove(buf_.data(), written + (logical_bytes - tail), tail);
+        buf_.size(tail);
+        buf_offset_ = filesize_ - tail;
+    } else {
+        buf_.clear();
+        buf_offset_ = filesize_;
+    }
 
-    buf_.clear();
     return Status::ok();
 }
 

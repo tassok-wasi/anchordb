@@ -17,12 +17,13 @@
 // program that installs a concrete Env (e.g. PosixEnv) fails to link without
 // them.  Defining them here also anchors each class's vtable.
 
+#include "random_access_reader.h"
 #include "anchordb/anchordb_namespace.h"
 #include "file_meta.h"
-#include "random_access_reader.h"
+#include "io_uring_config.h"
+#include "sync_io.h"
 #include "util/aligned_buffer.h"
 #include <fcntl.h>
-#include <liburing.h>
 #include <string_view>
 #include <unistd.h>
 
@@ -31,6 +32,14 @@ Status PosixRandomAccessFileReader::submit_read_(int fd, void *buf, size_t n,
                                                  uint64_t offset,
                                                  size_t *bytes_read) {
     *bytes_read = 0;
+#if !HAS_IO_URING
+    (void)fd;
+    (void)buf;
+    (void)n;
+    (void)offset;
+    return Status::not_supported(
+        std::string_view("io_uring support not compiled in"));
+#else
     size_t total_read = 0;
     int sqe_count = 0;
 
@@ -110,6 +119,7 @@ Status PosixRandomAccessFileReader::submit_read_(int fd, void *buf, size_t n,
 
     *bytes_read = total_read;
     return Status::ok();
+#endif
 }
 
 Status PosixRandomAccessFileReader::read(uint64_t offset, size_t n,
@@ -169,9 +179,19 @@ Status PosixRandomAccessFileReader::read(uint64_t offset, size_t n,
     }
 
     size_t bytes_read = 0;
-    Status status = submit_read_(target_fd, target_buf, read_bytes, read_offset,
-                                 &bytes_read);
-    if (!status.is_ok()) { return status; }
+    Status status;
+    if (ring_ == nullptr) {
+        // io_uring unavailable: random reads must not disturb a shared file
+        // offset, so pread(2) is both correct and thread-safe.
+        status =
+            file_internal::sync_pread(filename_, target_fd, target_buf,
+                                      read_bytes, read_offset, &bytes_read);
+        if (!status.is_ok()) { return status; }
+    } else {
+        status = submit_read_(target_fd, target_buf, read_bytes, read_offset,
+                              &bytes_read);
+        if (!status.is_ok()) { return status; }
+    }
 
     if (direct_io_) {
         uint64_t internal_offset = offset - read_offset;

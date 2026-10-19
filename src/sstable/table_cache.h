@@ -22,7 +22,6 @@
 #include "sstable/table.h"
 #include <cstddef>
 #include <cstdint>
-#include <memory>
 #include <string>
 #include <string_view>
 
@@ -33,10 +32,11 @@ namespace ANCHORDB_NAMESPACE {
 // from src/cache/ according to Options::table_cache_type and
 // Options::table_cache_size, and owned through a CacheWrapper.
 //
-// The cache value is a heap-allocated std::shared_ptr<const Table>; the cache
-// deleter frees it, while handles returned to callers keep the Table alive for
-// the duration of a read or an iterator's lifetime.  Cache keys are namespaced
-// by a per-TableCache id so multiple TableCaches can safely share one Cache.
+// The cache value is a Table* holding one reference; the cache deleter unrefs
+// it.  Callers of find_table receive their own reference, which keeps the Table
+// alive for the duration of a read or an iterator's lifetime.  Cache keys are
+// namespaced by a per-TableCache id so multiple TableCaches can safely share
+// one Cache.
 class TableCache {
   public:
     TableCache(const Options &options, std::string db_dir);
@@ -62,13 +62,14 @@ class TableCache {
     uint64_t namespace_id() const { return namespace_id_; }
 
   private:
-    // Looks up or opens the table, keeping a shared_ptr alive.
-    Status find_table(uint64_t table_number, std::shared_ptr<const Table> *out);
+    // Looks up or opens the table, returning a new reference in *out that the
+    // caller must unref().
+    Status find_table(uint64_t table_number, Table **out);
 
     // Builds the namespaced cache key for a table number.
     std::string cache_key(uint64_t table_number) const;
 
-    // Cache deleter for a heap-allocated std::shared_ptr<const Table>.
+    // Cache deleter for a Table* cache value.
     static void delete_entry(std::string_view key, void *value);
 
     Options options_;

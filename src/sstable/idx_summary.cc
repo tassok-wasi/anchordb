@@ -13,9 +13,7 @@
 // limitations under the License.
 
 #include "sstable/idx_summary.h"
-#include "sstable/empty_iter.h"
 #include "util/coding.h"
-#include <cassert>
 #include <cstdint>
 #include <string_view>
 #include <vector>
@@ -108,105 +106,6 @@ bool SummaryIndexReader::seek(std::string_view target,
 
     if (block_offset != nullptr) { *block_offset = entries_[lo].block_offset; }
     return true;
-}
-
-namespace {
-
-// Iterates the parsed summary entries in ascending key order.  key() exposes
-// the separator key and value() exposes the entry's absolute block offset as an
-// 8-byte little-endian buffer (see SummaryIndexReader::new_iterator).
-class SummaryIndexIter : public Iterator {
-  public:
-    SummaryIndexIter(const std::vector<SummaryEntry> &entries,
-                     Comparator comparator)
-        : entries_(entries), comparator_(comparator), index_(entries.size()) {
-        set_current();
-    }
-
-    bool valid() const override { return index_ < entries_.size(); }
-
-    void seek_to_first() override {
-        index_ = entries_.empty() ? entries_.size() : 0;
-        set_current();
-    }
-
-    void seek_to_last() override {
-        index_ = entries_.empty() ? entries_.size() : entries_.size() - 1;
-        set_current();
-    }
-
-    void seek(std::string_view target) override {
-        // First entry whose key is >= target (lower_bound).
-        size_t lo = 0;
-        size_t hi = entries_.size();
-        while (lo < hi) {
-            const size_t mid = lo + (hi - lo) / 2;
-            if (comparator_.compare(entries_[mid].key, target) < 0) {
-                lo = mid + 1;
-            } else {
-                hi = mid;
-            }
-        }
-        index_ = lo;
-        set_current();
-    }
-
-    void next() override {
-        assert(valid());
-        ++index_;
-        set_current();
-    }
-
-    void prev() override {
-        assert(valid());
-        // Moving before the first entry makes the iterator invalid.
-        index_ = (index_ == 0) ? entries_.size() : index_ - 1;
-        set_current();
-    }
-
-    std::string_view key() const override {
-        assert(valid());
-        return key_;
-    }
-
-    std::string_view value() const override {
-        assert(valid());
-        return value_;
-    }
-
-    Status status() const override { return Status::ok(); }
-
-  private:
-    void set_current() {
-        if (index_ < entries_.size()) {
-            key_ = entries_[index_].key;
-            encode_fixed_64(offset_buf_, entries_[index_].block_offset);
-            value_ = std::string_view(offset_buf_, sizeof(uint64_t));
-        } else {
-            key_ = std::string_view();
-            value_ = std::string_view();
-        }
-    }
-
-    const std::vector<SummaryEntry> &entries_;
-    const Comparator comparator_;
-    size_t index_;
-    std::string_view key_;
-    std::string_view value_;
-    // Backing storage for value_ (the encoded block offset of the current
-    // entry).  Stable because the iterator is neither copyable nor movable.
-    char offset_buf_[sizeof(uint64_t)]{};
-};
-
-} // namespace
-
-Iterator *SummaryIndexReader::new_iterator() const {
-    if (!valid_) {
-        return new_error_iterator(
-            Status::corruption("bad summary index contents"));
-    }
-    if (entries_.empty()) { return new_empty_iterator(); }
-    return new SummaryIndexIter(entries_, comparator_);
 }
 
 } // namespace ANCHORDB_NAMESPACE

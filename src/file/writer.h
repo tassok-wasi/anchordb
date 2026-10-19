@@ -18,9 +18,9 @@
 #include "anchordb/env.h"
 #include "anchordb/status.h"
 #include "file_meta.h"
+#include "io_uring_config.h"
 #include "util/aligned_buffer.h"
 #include <cstdint>
-#include <liburing.h>
 
 namespace ANCHORDB_NAMESPACE {
 // Buffered sequential write via io_uring. For MANIFEST files, sync() also
@@ -32,7 +32,8 @@ class PosixWritableFileWriter final : public WritableFileWriter {
                             uint64_t initial_filesize = 0)
         : filename_(std::move(filename)), fd_(fd), ring_(ring),
           filesize_(initial_filesize), direct_io_(direct_io),
-          is_manifest_(is_manifest(filename_)), dirname_(dirname(filename_)) {
+          buf_offset_(initial_filesize), is_manifest_(is_manifest(filename_)),
+          dirname_(dirname(filename_)) {
         if (buf != nullptr) {
             buf_ = std::move(*buf);
         } else {
@@ -70,6 +71,11 @@ class PosixWritableFileWriter final : public WritableFileWriter {
     struct io_uring *const ring_;
     uint64_t filesize_;
     const bool direct_io_;
+    // Aligned logical offset where buf_ begins. Under O_DIRECT this stays
+    // block-aligned so every physical write has an aligned offset; buf_ may
+    // hold a sub-block tail that has already been written (as padding) and is
+    // re-written, aligned, on the next flush.
+    uint64_t buf_offset_;
     AlignedBuffer buf_;
 };
 } // namespace ANCHORDB_NAMESPACE

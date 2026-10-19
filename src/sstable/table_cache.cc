@@ -17,7 +17,6 @@
 #include "sstable/table.h"
 #include "sstable/table_cache.h"
 #include "util/coding.h"
-#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -29,18 +28,15 @@ namespace ANCHORDB_NAMESPACE {
 namespace {
 
 // Builds the concrete Cache implementation selected by the options.
-std::unique_ptr<Cache> make_cache(const Options &options) {
+Cache *make_cache(const Options &options) {
     switch (options.table_cache_type) {
     case CacheType::LIRS:
-        return std::unique_ptr<Cache>(
-            new_lirs_cache(options.table_cache_size, options.active_map));
+        return new_lirs_cache(options.table_cache_size, options.active_map);
     case CacheType::ClockPro:
-        return std::unique_ptr<Cache>(
-            new_clock_pro_cache(options.table_cache_size, options.active_map));
+        return new_clock_pro_cache(options.table_cache_size,
+                                   options.active_map);
     case CacheType::LRU:
-    default:
-        return std::unique_ptr<Cache>(
-            new_lru_cache(options.table_cache_size, options.active_map));
+    default: return new_lru_cache(options.table_cache_size, options.active_map);
     }
 }
 
@@ -64,11 +60,10 @@ std::string TableCache::cache_key(uint64_t table_number) const {
 }
 
 void TableCache::delete_entry(std::string_view, void *value) {
-    delete static_cast<std::shared_ptr<const Table> *>(value);
+    static_cast<Table *>(value)->unref();
 }
 
-Status TableCache::find_table(uint64_t table_number,
-                              std::shared_ptr<const Table> *out) {
+Status TableCache::find_table(uint64_t table_number, Table **out) {
     if (out == nullptr) {
         return Status::invalid_argument("TableCache::find_table: null output");
     }
@@ -76,30 +71,31 @@ Status TableCache::find_table(uint64_t table_number,
     const std::string key = cache_key(table_number);
     Cache::Handle *handle = cache_.lookup(key);
     if (handle != nullptr) {
-        auto *holder =
-            static_cast<std::shared_ptr<const Table> *>(cache_.value(handle));
-        *out = *holder;
+        Table *table = static_cast<Table *>(cache_.value(handle));
+        table->ref();
         cache_.release(handle);
+        *out = table;
         return Status::ok();
     }
 
     const TableFileSet files = make_table_file_set(db_dir_, table_number);
-    std::shared_ptr<Table> table;
+    Table *table = nullptr;
     Status s = Table::open(options_, files, &table);
     if (!s.is_ok()) { return s; }
 
-    auto shared = std::shared_ptr<const Table>(table);
-    auto *holder = new std::shared_ptr<const Table>(shared);
+    // open() returned one reference.  Give the cache its own reference, then
+    // hand the caller the original one.
+    table->ref();
     Cache::Handle *inserted =
-        cache_.insert(key, holder, shared->cache_charge(), &delete_entry);
+        cache_.insert(key, table, table->cache_charge(), &delete_entry);
     if (inserted != nullptr) {
-        auto *stored =
-            static_cast<std::shared_ptr<const Table> *>(cache_.value(inserted));
-        *out = *stored;
         cache_.release(inserted);
+        *out = table;
     } else {
-        // Cache is disabled (zero capacity): hand back the table directly.
-        *out = std::move(shared);
+        // Cache is disabled (zero capacity): no cache reference was taken, so
+        // drop the extra reference and hand the table directly to the caller.
+        table->unref();
+        *out = table;
     }
     return Status::ok();
 }
@@ -107,10 +103,12 @@ Status TableCache::find_table(uint64_t table_number,
 Status TableCache::get(const ReadOptions &options, uint64_t table_number,
                        std::string_view key, std::string *value,
                        std::string *scratch) {
-    std::shared_ptr<const Table> table;
+    Table *table = nullptr;
     Status s = find_table(table_number, &table);
     if (!s.is_ok()) { return s; }
-    return table->get(options, key, value, scratch);
+    Status result = table->get(options, key, value, scratch);
+    table->unref();
+    return result;
 }
 
 Status TableCache::new_iterator(const ReadOptions &options,
@@ -119,10 +117,11 @@ Status TableCache::new_iterator(const ReadOptions &options,
         return Status::invalid_argument(
             "TableCache::new_iterator: null iterator output");
     }
-    std::shared_ptr<const Table> table;
+    Table *table = nullptr;
     Status s = find_table(table_number, &table);
     if (!s.is_ok()) { return s; }
     *iter = table->new_iterator(options);
+    table->unref();
     return Status::ok();
 }
 

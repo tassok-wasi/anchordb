@@ -23,6 +23,8 @@
 
 namespace ANCHORDB_NAMESPACE {
 
+// An Iterator implementation that is always invalid.
+// Used to represent empty result sets or to carry an error Status.
 class EmptyIterator : public Iterator {
   public:
     EmptyIterator() = default;
@@ -32,12 +34,11 @@ class EmptyIterator : public Iterator {
     EmptyIterator(EmptyIterator &&other) noexcept
         : status_(std::move(other.status_)) {}
     EmptyIterator &operator=(EmptyIterator &&other) {
-        if (this != &other) {
-            this->status_ = std::move(other.status_);
-        }
+        if (this != &other) { this->status_ = std::move(other.status_); }
         return *this;
     }
 
+    // An empty iterator is never valid.
     bool valid() const override { return false; }
     void seek(std::string_view target) override {}
     void seek_to_first() override {}
@@ -58,11 +59,13 @@ class EmptyIterator : public Iterator {
     Status status_;
 };
 
+// Creates an empty iterator with an OK status.
 inline Iterator *new_empty_iterator() {
     return new EmptyIterator(Status::ok());
 }
+// Creates an invalid iterator carrying the given error status.
 inline Iterator *new_error_iterator(const Status &status) {
     return new EmptyIterator(status);
 }
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

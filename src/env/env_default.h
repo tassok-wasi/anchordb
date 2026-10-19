@@ -1,0 +1,32 @@
+// Copyright 2026 Tassok Imam Wasi
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+
+//     http://www.apache.org/licenses/LICENSE-2.0
+
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#pragma once
+
+#include "anchordb/anchordb_namespace.h"
+
+namespace ANCHORDB_NAMESPACE {
+
+class Env;
+
+namespace env_internal {
+
+// Creates the default Env for the current platform. This is defined exactly
+// once per platform (currently in env/posix.cc), keeping the platform-specific
+// class out of the public header and out of env.cc.
+Env *create_default_env();
+
+} // namespace env_internal
+
+} // namespace ANCHORDB_NAMESPACE

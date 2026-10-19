@@ -31,23 +31,29 @@ class Arena {
     Arena(const Arena &) = delete;
     Arena &operator=(const Arena &) = delete;
 
+    // Allocates the requested number of bytes from the arena.
     char *allocate(size_t bytes);
+    // Allocates the requested number of bytes with alignment.
     char *allocate_aligned(size_t bytes);
 
+    // Returns the total memory used by the arena.
     size_t memory_usage() const { return memory_usage_; }
 
+    // Releases all allocated blocks and resets the arena.
     void reset();
 
   private:
+    // Allocates a new block when the current one lacks space.
     char *allocate_fallback(size_t bytes);
+    // Allocates and tracks a new block of the given size.
     char *allocate_new_block(size_t block_bytes);
 
-    char *alloc_ptr_;
-    size_t alloc_bytes_remaining_;
-    std::vector<char *> blocks_;
-    const uint32_t k_block_size_ = 4096;
+    char *alloc_ptr_; // Pointer to the next free byte in the current block.
+    size_t alloc_bytes_remaining_; // Bytes remaining in the current block.
+    std::vector<char *> blocks_;   // All blocks owned by the arena.
+    const uint32_t k_block_size_ = 4096; // Default block size in bytes.
 
-    size_t memory_usage_;
+    size_t memory_usage_; // Total memory allocated by the arena.
 };
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

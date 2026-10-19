@@ -17,7 +17,6 @@
 #include "anchordb/cache.h"
 #include <cstddef>
 #include <cstdint>
-#include <memory>
 #include <string_view>
 
 #include "anchordb/anchordb_namespace.h"
@@ -32,14 +31,24 @@ namespace ANCHORDB_NAMESPACE {
 // the wrapped cache is destroyed with the wrapper.
 class CacheWrapper {
   public:
-    explicit CacheWrapper(std::unique_ptr<Cache> cache)
-        : cache_(std::move(cache)) {}
+    explicit CacheWrapper(Cache *cache) : cache_(cache) {}
 
     CacheWrapper(const CacheWrapper &) = delete;
     CacheWrapper &operator=(const CacheWrapper &) = delete;
 
-    CacheWrapper(CacheWrapper &&) noexcept = default;
-    CacheWrapper &operator=(CacheWrapper &&) noexcept = default;
+    CacheWrapper(CacheWrapper &&other) noexcept : cache_(other.cache_) {
+        other.cache_ = nullptr;
+    }
+    CacheWrapper &operator=(CacheWrapper &&other) noexcept {
+        if (this != &other) {
+            delete cache_;
+            cache_ = other.cache_;
+            other.cache_ = nullptr;
+        }
+        return *this;
+    }
+
+    ~CacheWrapper() { delete cache_; }
 
     bool valid() const { return cache_ != nullptr; }
 
@@ -63,7 +72,7 @@ class CacheWrapper {
     size_t total_charge() const { return cache_->total_charge(); }
 
   private:
-    std::unique_ptr<Cache> cache_;
+    Cache *cache_;
 };
 
 } // namespace ANCHORDB_NAMESPACE

@@ -179,61 +179,62 @@ Status decode_data_record(std::string_view input, ParsedDataRecord *result) {
     return decode_data_record(&input, result);
 }
 
-Status data_record_size(std::string_view input, size_t *total_size,
-                        bool *complete) {
-    if (total_size == nullptr || complete == nullptr) {
-        return Status::invalid_argument("data_record_size: null output");
-    }
-    *complete = false;
-    *total_size = kDataRecordHeaderSize;
+// Status data_record_size(std::string_view input, size_t *total_size,
+//                         bool *complete) {
+//     if (total_size == nullptr || complete == nullptr) {
+//         return Status::invalid_argument("data_record_size: null output");
+//     }
+//     *complete = false;
+//     *total_size = kDataRecordHeaderSize;
 
-    if (input.size() < kDataRecordHeaderSize) { return Status::ok(); }
-    if (decode_fixed_32(input.data()) != kDataRecordMagic) {
-        return Status::corruption("data record bad magic number");
-    }
+//     if (input.size() < kDataRecordHeaderSize) { return Status::ok(); }
+//     if (decode_fixed_32(input.data()) != kDataRecordMagic) {
+//         return Status::corruption("data record bad magic number");
+//     }
 
-    const size_t key_start = kDataRecordHeaderSize;
-    std::string_view rest = input.substr(key_start);
-    uint64_t key_size = 0;
-    size_t key_varint_len = 0;
-    {
-        std::string_view before = rest;
-        if (!get_varint_64(&rest, &key_size)) {
-            *total_size = key_start + 10; // max varint64 width
-            return Status::ok();
-        }
-        key_varint_len = static_cast<size_t>(rest.data() - before.data());
-    }
-    if (key_size > UINT16_MAX) {
-        return Status::corruption("data record key_size implausibly large");
-    }
+//     const size_t key_start = kDataRecordHeaderSize;
+//     std::string_view rest = input.substr(key_start);
+//     uint64_t key_size = 0;
+//     size_t key_varint_len = 0;
+//     {
+//         std::string_view before = rest;
+//         if (!get_varint_64(&rest, &key_size)) {
+//             *total_size = key_start + 10; // max varint64 width
+//             return Status::ok();
+//         }
+//         key_varint_len = static_cast<size_t>(rest.data() - before.data());
+//     }
+//     if (key_size > UINT16_MAX) {
+//         return Status::corruption("data record key_size implausibly large");
+//     }
 
-    const size_t after_key =
-        key_start + key_varint_len + static_cast<size_t>(key_size);
-    if (input.size() < after_key + 1) {
-        *total_size = after_key + 10;
-        return Status::ok();
-    }
+//     const size_t after_key =
+//         key_start + key_varint_len + static_cast<size_t>(key_size);
+//     if (input.size() < after_key + 1) {
+//         *total_size = after_key + 10;
+//         return Status::ok();
+//     }
 
-    std::string_view vc = input.substr(after_key);
-    uint64_t value_size = 0;
-    size_t value_varint_len = 0;
-    {
-        std::string_view before = vc;
-        if (!get_varint_64(&vc, &value_size)) {
-            *total_size = after_key + 10;
-            return Status::ok();
-        }
-        value_varint_len = static_cast<size_t>(vc.data() - before.data());
-    }
-    if (value_size > (1ull << 40)) {
-        return Status::corruption("data record value_size implausibly large");
-    }
+//     std::string_view vc = input.substr(after_key);
+//     uint64_t value_size = 0;
+//     size_t value_varint_len = 0;
+//     {
+//         std::string_view before = vc;
+//         if (!get_varint_64(&vc, &value_size)) {
+//             *total_size = after_key + 10;
+//             return Status::ok();
+//         }
+//         value_varint_len = static_cast<size_t>(vc.data() - before.data());
+//     }
+//     if (value_size > (1ull << 40)) {
+//         return Status::corruption("data record value_size implausibly
+//         large");
+//     }
 
-    *total_size = after_key + value_varint_len + kDataRecordValueMetaSize +
-                  static_cast<size_t>(value_size);
-    *complete = true;
-    return Status::ok();
-}
+//     *total_size = after_key + value_varint_len + kDataRecordValueMetaSize +
+//                   static_cast<size_t>(value_size);
+//     *complete = true;
+//     return Status::ok();
+// }
 
 } // namespace ANCHORDB_NAMESPACE

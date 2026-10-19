@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "sstable/empty_iter.h"
 #include "sstable/idx_block_reader.h"
+#include "sstable/empty_iter.h"
 #include "util/coding.h"
 #include <cassert>
 #include <cstdint>
@@ -24,10 +24,6 @@
 namespace ANCHORDB_NAMESPACE {
 
 namespace {
-// Byte offsets within a forward slot (see idx_block_writer.h layout doc).
-inline constexpr size_t kSlotTypeOff = 2;         // value_type (1B)
-inline constexpr size_t kSlotFlagOff = 3;         // value_flag (1B)
-inline constexpr size_t kSlotGlobalOffsetOff = 4; // data_global_offset (8B)
 
 int ByteWiseCompare(std::string_view a, std::string_view b) {
     return a.compare(b);
@@ -82,6 +78,7 @@ IndexBlockEntry IndexBlockReader::entry(size_t index) const {
         static_cast<ValueType>(static_cast<uint8_t>(slot[kSlotTypeOff]));
     result.handle.flag =
         static_cast<ValueFlag>(static_cast<uint8_t>(slot[kSlotFlagOff]));
+    result.handle.data_size = decode_fixed_32(slot + kSlotDataSizeOff);
     result.handle.offset = decode_fixed_64(slot + kSlotGlobalOffsetOff);
     result.timestamp = decode_fixed_64(payload + sizeof(uint16_t) + key_len);
     return result;
@@ -95,10 +92,12 @@ bool IndexBlockReader::decode_value(std::string_view value, ValueHandle *handle,
     if (handle != nullptr) {
         handle->type = static_cast<ValueType>(static_cast<uint8_t>(p[0]));
         handle->flag = static_cast<ValueFlag>(static_cast<uint8_t>(p[1]));
-        handle->offset = decode_fixed_64(p + 2);
+        handle->data_size = decode_fixed_32(p + 2);
+        handle->offset = decode_fixed_64(p + 2 + sizeof(uint32_t));
     }
     if (timestamp != nullptr) {
-        *timestamp = decode_fixed_64(p + 2 + sizeof(uint64_t));
+        *timestamp =
+            decode_fixed_64(p + 2 + sizeof(uint32_t) + sizeof(uint64_t));
     }
     return true;
 }
@@ -176,8 +175,11 @@ class IndexBlockIter : public Iterator {
                 static_cast<char>(static_cast<uint8_t>(current.handle.type));
             value_buf_[1] =
                 static_cast<char>(static_cast<uint8_t>(current.handle.flag));
-            encode_fixed_64(value_buf_ + 2, current.handle.offset);
-            encode_fixed_64(value_buf_ + 2 + sizeof(uint64_t),
+            encode_fixed_32(value_buf_ + 2, current.handle.data_size);
+            encode_fixed_64(value_buf_ + 2 + sizeof(uint32_t),
+                            current.handle.offset);
+            encode_fixed_64(value_buf_ + 2 + sizeof(uint32_t) +
+                                sizeof(uint64_t),
                             current.timestamp);
             value_ = std::string_view(value_buf_, kIndexValueSize);
         } else {

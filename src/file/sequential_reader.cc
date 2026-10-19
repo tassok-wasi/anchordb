@@ -19,9 +19,10 @@
 
 #include "anchordb/anchordb_namespace.h"
 #include "file_meta.h"
+#include "io_uring_config.h"
 #include "seqeuntial_reader.h"
+#include "sync_io.h"
 #include <fcntl.h>
-#include <liburing.h>
 #include <unistd.h>
 
 namespace ANCHORDB_NAMESPACE {
@@ -30,8 +31,19 @@ Status PosixSequentialFileReader::submit_read_(void *dst, size_t len,
                                                uint64_t offset,
                                                size_t *bytes_read) {
     *bytes_read = 0;
-    size_t total_read = 0;
 
+    // io_uring unavailable: the caller supplied an explicit offset, so pread
+    // is the correct synchronous primitive.
+    if (ring_ == nullptr) {
+        return file_internal::sync_pread(
+            filename_, fd_, static_cast<char *>(dst), len, offset, bytes_read);
+    }
+
+#if !HAS_IO_URING
+    return Status::not_supported(
+        std::string_view("io_uring support not compiled in"));
+#else
+    size_t total_read = 0;
     while (total_read < len) {
         struct io_uring_sqe *sqe = io_uring_get_sqe(ring_);
         if (!sqe) {
@@ -71,6 +83,7 @@ Status PosixSequentialFileReader::submit_read_(void *dst, size_t len,
 
     *bytes_read = total_read;
     return Status::ok();
+#endif
 }
 
 Status PosixSequentialFileReader::read(size_t n, std::string_view *result,
@@ -105,13 +118,12 @@ Status PosixSequentialFileReader::read(size_t n, std::string_view *result,
                                         n - total_copied, offset_, &bytes_read);
                 if (!s.is_ok()) return s;
             } else {
-                ::ssize_t r =
-                    ::read(fd_, scratch + total_copied, n - total_copied);
-                if (r < 0) {
-                    if (errno == EINTR) continue;
-                    return posix_error(filename_, errno);
-                }
-                bytes_read = static_cast<size_t>(r);
+                // Killing two birds: no io_uring means buffered streaming, so
+                // read(2) lets the kernel maintain the file offset/readahead.
+                Status s = file_internal::sync_read(
+                    filename_, fd_, scratch + total_copied, n - total_copied,
+                    &bytes_read);
+                if (!s.is_ok()) return s;
             }
 
             if (bytes_read == 0) break;

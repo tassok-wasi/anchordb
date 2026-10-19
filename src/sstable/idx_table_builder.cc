@@ -83,8 +83,8 @@ Status IndexTableBuilder::add(std::string_view key, const ValueHandle &handle,
 
 Status IndexTableBuilder::add(std::string_view key, ValueType type,
                               ValueFlag flag, uint64_t data_offset,
-                              uint64_t timestamp) {
-    return add(key, ValueHandle{type, flag, data_offset}, timestamp);
+                              uint32_t data_size, uint64_t timestamp) {
+    return add(key, ValueHandle{type, flag, data_offset, data_size}, timestamp);
 }
 
 size_t IndexTableBuilder::size_estimate() const {

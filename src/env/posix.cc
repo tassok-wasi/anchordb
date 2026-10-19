@@ -12,87 +12,143 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "env/posix.h"
 #include "anchordb/env.h"
 #include "anchordb/status.h"
-#include "env/posix.h"
+#include "env/env_default.h"
 #include "file/random_access_reader.h"
 #include "file/seqeuntial_reader.h"
 #include "file/writer.h"
 #include "util/posix_logger.h"
 
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <fcntl.h>
-#include <system_error>
+#include <memory>
+#include <string_view>
 #include <thread>
+#include <vector>
 
 #include "anchordb/anchordb_namespace.h"
 
+#ifndef ANCHORDB_DIRECT_IO_DEFAULT
+    #define ANCHORDB_DIRECT_IO_DEFAULT 1
+#endif
+
 namespace ANCHORDB_NAMESPACE {
 
-PosixEnv::PosixEnv() : PosixEnv(1000, 256, true) {}
+namespace {
+
+std::atomic<uint64_t> g_next_env_id{1};
+
+uint64_t next_env_id() {
+    return g_next_env_id.fetch_add(1, std::memory_order_relaxed);
+}
+
+#if HAS_IO_URING
+// A thread-local io_uring ring owned by the thread that created it. Keying by
+// env id prevents registries from different PosixEnv instances (or a later
+// instance reusing the same address) from colliding, and the ring is freed
+// when the owning thread exits rather than by the environment.
+struct TlsRingEntry {
+    uint64_t env_id;
+    std::unique_ptr<struct io_uring> ring;
+};
+#endif
+
+} // namespace
+
+namespace env_internal {
+
+Env *create_default_env() { return new PosixEnv(); }
+
+} // namespace env_internal
+
+PosixEnv::PosixEnv() : PosixEnv(1000, 256, ANCHORDB_DIRECT_IO_DEFAULT != 0) {}
 
 PosixEnv::PosixEnv(int max_open_files, uint32_t ring_entries, bool direct_io)
     : direct_io_(direct_io), ring_entries_(ring_entries),
-      fd_limiter_(max_open_files) {
+      env_id_(next_env_id()), fd_limiter_(max_open_files) {
+    // Failure is not fatal: get_thread_local_ring() reports nullptr and the
+    // I/O paths fall back to synchronous pread/pwrite. Construction must not
+    // throw; the outcome is reported through ring_status().
+#if HAS_IO_URING
     int ret = io_uring_queue_init(ring_entries, &default_ring_, 0);
     if (ret < 0) {
-        throw std::system_error(-ret, std::generic_category(),
-                                "Failed to initialize default io_uring queue");
+        default_ring_valid_ = false;
+        ring_status_ = Status::io_error(std::string_view("io_uring_queue_init"),
+                                        std::strerror(-ret));
+    } else {
+        default_ring_valid_ = true;
+        ring_status_ = Status::ok();
     }
+#else
+    default_ring_valid_ = false;
+    ring_status_ = Status::not_supported(
+        std::string_view("io_uring support not compiled in"));
+#endif
+}
+
+Status PosixEnv::create(int max_open_files, uint32_t ring_entries,
+                        bool direct_io, PosixEnv **result) {
+    if (result == nullptr) {
+        return Status::invalid_argument(
+            std::string_view("PosixEnv::create: result is null"));
+    }
+    PosixEnv *env = new PosixEnv(max_open_files, ring_entries, direct_io);
+    *result = env;
+    return env->ring_status();
 }
 
 PosixEnv::~PosixEnv() {
     // Drain the background pool before tearing down the io_uring rings. The
     // pool's destructor rejects new work, finishes what is already queued,
     // and joins its workers, so no scheduled task can touch a ring after this
-    // point.
+    // point. Each worker's thread-local ring is freed when that worker exits
+    // during the join.
     pool.shutdown();
 
-    // Destroy shared default ring
-    io_uring_queue_exit(&default_ring_);
-
-    // Destroy all registered thread-local rings
-    std::lock_guard<std::mutex> lock(tls_rings_mutex_);
-    for (struct io_uring *ring : registered_tls_rings_) {
-        if (ring) {
-            io_uring_queue_exit(ring);
-            delete ring;
-        }
-    }
-    registered_tls_rings_.clear();
+#if HAS_IO_URING
+    // Destroy the shared default ring, but only if it was initialized.
+    if (default_ring_valid_) { io_uring_queue_exit(&default_ring_); }
+#endif
 }
 
 struct io_uring *PosixEnv::get_thread_local_ring() {
-    thread_local struct io_uring *tls_ring = nullptr;
+#if !HAS_IO_URING
+    return nullptr;
+#else
+    thread_local std::vector<TlsRingEntry> tls_rings;
 
-    if (tls_ring == nullptr) {
-        tls_ring = new struct io_uring();
-        int ret = io_uring_queue_init(ring_entries_, tls_ring, 0);
-        if (ret < 0) {
-            delete tls_ring;
-            tls_ring = nullptr; // Prevent dangling pointer on subsequent calls
-            return &default_ring_;
-        }
-
-        std::lock_guard<std::mutex> lock(tls_rings_mutex_);
-        registered_tls_rings_.push_back(tls_ring);
+    for (const TlsRingEntry &entry : tls_rings) {
+        if (entry.env_id == env_id_) { return entry.ring.get(); }
     }
-    return tls_ring;
+
+    auto ring = std::make_unique<struct io_uring>();
+    if (io_uring_queue_init(ring_entries_, ring.get(), 0) < 0) {
+        return default_ring_valid_ ? &default_ring_ : nullptr;
+    }
+
+    struct io_uring *raw_ring = ring.get();
+    tls_rings.push_back(TlsRingEntry{env_id_, std::move(ring)});
+    return raw_ring;
+#endif
 }
 
 Status PosixEnv::new_sequential_file_reader(const std::string &filename,
                                             SequentialFileReader **result,
                                             size_t buffer_size) {
+    struct io_uring *ring = get_thread_local_ring();
+
     int flags = O_RDONLY | kOpenBaseFlags;
     if (direct_io_) { flags |= O_DIRECT; }
 
     int fd = ::open(filename.c_str(), flags, 0);
     if (fd < 0) { return posix_error(filename, errno); }
 
-    struct io_uring *ring = get_thread_local_ring();
-    if (!ring) { ring = &default_ring_; }
     size_t buf_size =
         (buffer_size != 0) ? buffer_size : k_seq_file_reader_buf_size;
     AlignedBuffer buf(buf_size, k_o_direct_alignment);
@@ -107,6 +163,9 @@ PosixEnv::new_random_access_file_reader(const std::string &filename,
                                         RandomAccessFileReader **result) {
     int fd = -1;
 
+    // Obtain the calling thread's dedicated lock-free io_uring ring.
+    struct io_uring *ring = get_thread_local_ring();
+
     if (fd_limiter_.acquire()) {
         int flags = O_RDONLY | kOpenBaseFlags;
         if (direct_io_) { flags |= O_DIRECT; }
@@ -120,10 +179,6 @@ PosixEnv::new_random_access_file_reader(const std::string &filename,
         }
     }
 
-    // Obtain the calling thread's dedicated lock-free io_uring ring
-    struct io_uring *ring = get_thread_local_ring();
-    if (!ring) { ring = &default_ring_; }
-
     *result = new PosixRandomAccessFileReader(filename, fd, &fd_limiter_, ring,
                                               direct_io_);
     return Status::ok();
@@ -132,15 +187,14 @@ PosixEnv::new_random_access_file_reader(const std::string &filename,
 Status PosixEnv::new_writable_file_writer(const std::string &filename,
                                           WritableFileWriter **result,
                                           size_t buffer_size) {
+    // Obtain the calling thread's dedicated lock-free io_uring ring.
+    struct io_uring *ring = get_thread_local_ring();
+
     int flags = O_CREAT | O_WRONLY | O_TRUNC | kOpenBaseFlags;
     if (direct_io_) { flags |= O_DIRECT; }
 
     int fd = ::open(filename.c_str(), flags, 0644);
     if (fd < 0) { return posix_error(filename, errno); }
-
-    // Obtain the calling thread's dedicated lock-free io_uring ring
-    struct io_uring *ring = get_thread_local_ring();
-    if (!ring) { ring = &default_ring_; }
 
     size_t buf_size =
         (buffer_size != 0) ? buffer_size : k_writable_file_buf_size;
@@ -153,15 +207,23 @@ Status PosixEnv::new_writable_file_writer(const std::string &filename,
 Status PosixEnv::new_appendable_file_writer(const std::string &filename,
                                             WritableFileWriter **result,
                                             size_t buffer_size) {
-    int flags = O_CREAT | O_WRONLY | O_APPEND | kOpenBaseFlags;
-    if (direct_io_) { flags |= O_DIRECT; }
+    // Obtain the calling thread's dedicated lock-free io_uring ring.
+    struct io_uring *ring = get_thread_local_ring();
+
+    // O_APPEND and O_DIRECT do not mix: on Linux an append-mode write ignores
+    // the supplied offset, so we could never place a block-aligned write. When
+    // direct I/O is requested, position writes ourselves via the tracked file
+    // size instead of relying on O_APPEND. O_RDWR is required because the
+    // first flush may read-modify-write a leading partial block.
+    int flags = O_CREAT | kOpenBaseFlags;
+    if (direct_io_) {
+        flags |= O_RDWR | O_DIRECT;
+    } else {
+        flags |= O_WRONLY | O_APPEND;
+    }
 
     int fd = ::open(filename.c_str(), flags, 0644);
     if (fd < 0) { return posix_error(filename, errno); }
-
-    // Obtain the calling thread's dedicated lock-free io_uring ring
-    struct io_uring *ring = get_thread_local_ring();
-    if (!ring) { ring = &default_ring_; }
 
     size_t buf_size =
         (buffer_size != 0) ? buffer_size : k_writable_file_buf_size;

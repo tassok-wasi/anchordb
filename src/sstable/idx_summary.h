@@ -16,7 +16,6 @@
 
 #include "anchordb/anchordb_namespace.h"
 #include "anchordb/comparator.h"
-#include "anchordb/iterator.h"
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -102,15 +101,6 @@ class SummaryIndexReader {
 
     const std::vector<SummaryEntry> &entries() const { return entries_; }
     const SummaryEntry &entry(size_t index) const { return entries_[index]; }
-
-    // Returns a heap-allocated iterator over the summary entries in ascending
-    // key order.  The iterator's key() is the separator key and value() is the
-    // 8-byte little-endian absolute block offset (decode with decode_fixed_64).
-    // The caller owns the returned iterator and must keep this reader (and the
-    // buffer it was built from) alive for the iterator's lifetime.  If the
-    // buffer was malformed, returns an error iterator; if it held no entries,
-    // returns an empty iterator.
-    Iterator *new_iterator() const;
 
   private:
     Comparator comparator_;

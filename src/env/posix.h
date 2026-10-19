@@ -16,6 +16,7 @@
 
 #include "anchordb/env.h"
 #include "anchordb/status.h"
+#include "file/io_uring_config.h" // IWYU pragma: keep
 #include "file/limiter.h"
 #include "file/lock_table.h"
 #include "port/port.h" // IWYU pragma: keep
@@ -24,8 +25,6 @@
 #include <cstdint>
 #include <dirent.h>
 #include <fcntl.h>
-#include <liburing.h>
-#include <mutex>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
@@ -56,12 +55,26 @@ class PosixEnv : public Env {
     // and an optional |direct_io_enabled| flag for O_DIRECT on reads.
     PosixEnv(int max_open_files, uint32_t ring_entries, bool direct_io = false);
 
+    // Constructs a PosixEnv and reports io_uring availability through the
+    // returned Status. A non-ok status (io_uring unavailable) does not mean
+    // construction failed: the environment is always usable and degrades to
+    // synchronous pread/pwrite. On success |*result| is never null.
+    static Status create(int max_open_files, uint32_t ring_entries,
+                         bool direct_io, PosixEnv **result);
+
+    // Describes io_uring availability for this environment: ok when a default
+    // ring was created, otherwise an error explaining why I/O is synchronous.
+    const Status &ring_status() const { return ring_status_; }
+
     // Destructs the environment, drains the background thread pool, and
     // destroys all io_uring rings (default and thread-local).
     ~PosixEnv() override;
 
     // Returns a thread-local io_uring ring initialized with |ring_entries_|.
-    // Falls back to |default_ring_| if initialization fails.
+    // Falls back to |default_ring_| if initialization fails, or returns
+    // nullptr when io_uring is unavailable on this system. A nullptr ring
+    // means callers must use synchronous POSIX I/O; O_DIRECT is still honored
+    // because the I/O classes handle alignment via AlignedBuffer.
     struct io_uring *get_thread_local_ring();
 
     // File creation and I/O
@@ -108,15 +121,24 @@ class PosixEnv : public Env {
     // Configuration
     const bool direct_io_;
     const uint32_t ring_entries_;
+    // Unique per instance; keys this environment's entry in each thread's
+    // thread-local ring registry.
+    const uint64_t env_id_;
+    Status ring_status_;
 
     // File descriptor management
     PosixLockTable locks_;
     Limiter fd_limiter_;
 
-    // io_uring infrastructure
+    // io_uring infrastructure. If io_uring_queue_init() fails, the ring is
+    // unusable and all I/O degrades to synchronous pread/pwrite. O_DIRECT
+    // still applies; the readers/writers keep buffers and offsets aligned.
+    // Thread-local rings are owned by their threads (see
+    // get_thread_local_ring()), so this environment does not track them.
+#if HAS_IO_URING
     struct io_uring default_ring_{};
-    mutable std::mutex tls_rings_mutex_;
-    std::vector<struct io_uring *> registered_tls_rings_;
+#endif
+    bool default_ring_valid_{false};
 
     // Background thread pool backing schedule(). Sized to the number of
     // hardware threads, with a floor of one worker. Declared last so that it

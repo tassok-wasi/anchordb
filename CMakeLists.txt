@@ -6,6 +6,13 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+option(ANCHORDB_USE_IO_URING
+    "Use io_uring for asynchronous I/O on Linux when liburing is available"
+    ON)
+option(ANCHORDB_DIRECT_IO_DEFAULT
+    "Open files with O_DIRECT by default in the POSIX environment"
+    ON)
+
 
 add_library(anchordb STATIC)
 
@@ -44,6 +51,11 @@ target_sources(anchordb
         src/util/crc32.h
         src/util/crc32.cc
         src/env/env.cc
+        src/env/env_default.h
+        src/file/filename.h
+        src/file/filename.cc
+        src/file/io_uring_config.h
+        src/file/sync_io.h
         src/util/aligned_buffer.h
         src/util/comparator.cc
         src/util/compressor.cc
@@ -85,6 +97,8 @@ target_sources(anchordb
         src/sstable/empty_iter.h
         src/sstable/data_record.h
         src/sstable/data_record.cc
+        src/sstable/record_file_writer.h
+        src/sstable/record_file_writer.cc
         src/sstable/iterator_wrapper.h
         src/port/port.h
         src/port/port_thread.h
@@ -139,11 +153,29 @@ elseif (UNIX AND NOT APPLE)
 
     )
 
-    # Locate and link liburing for the io_uring engine layer
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(LIBURING REQUIRED liburing)
-    target_include_directories(anchordb PRIVATE ${LIBURING_INCLUDE_DIRS})
-    target_link_libraries(anchordb PRIVATE ${LIBURING_LIBRARIES})
+    # Locate and link liburing for the io_uring engine layer. io_uring is
+    # optional: without liburing the environment still builds and runs using
+    # the synchronous fallback paths.
+    if (ANCHORDB_USE_IO_URING)
+        find_package(PkgConfig REQUIRED)
+        pkg_check_modules(LIBURING liburing)
+        if (LIBURING_FOUND)
+            target_include_directories(anchordb PRIVATE ${LIBURING_INCLUDE_DIRS})
+            target_link_libraries(anchordb PRIVATE ${LIBURING_LIBRARIES})
+            target_compile_definitions(anchordb PRIVATE HAS_IO_URING=1)
+        else()
+            message(WARNING
+                "liburing not found; building without io_uring support "
+                "(synchronous I/O only)")
+            target_compile_definitions(anchordb PRIVATE HAS_IO_URING=0)
+        endif()
+    else()
+        message(STATUS "ANCHORDB_USE_IO_URING=OFF: synchronous I/O only")
+        target_compile_definitions(anchordb PRIVATE HAS_IO_URING=0)
+    endif()
+
+    target_compile_definitions(anchordb
+        PRIVATE ANCHORDB_DIRECT_IO_DEFAULT=$<BOOL:${ANCHORDB_DIRECT_IO_DEFAULT}>)
 endif()
 
 target_include_directories(anchordb

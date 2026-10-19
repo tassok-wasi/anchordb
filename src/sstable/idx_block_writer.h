@@ -30,21 +30,33 @@ inline constexpr int kDefaultBlockSize = 65536; // 64KB
 
 // Fixed on-disk sizes of the index block layout below.
 inline constexpr size_t kIndexHeaderSize = 4;
-inline constexpr size_t kIndexSlotSize = 12;
+inline constexpr size_t kIndexSlotSize = 16;
+
+// Byte offsets of the fields within one forward slot.
+inline constexpr size_t kSlotKeyOffsetOff = 0;    // key_local_offset (2B)
+inline constexpr size_t kSlotTypeOff = 2;         // value_type (1B)
+inline constexpr size_t kSlotFlagOff = 3;         // value_flag (1B)
+inline constexpr size_t kSlotDataSizeOff = 4;     // data_size (4B)
+inline constexpr size_t kSlotGlobalOffsetOff = 8; // data_global_offset (8B)
 
 struct ValueHandle {
     ValueType type;
     ValueFlag flag;
     uint64_t offset;
+    // Total encoded size (in bytes) of the referenced record in data.bin.  This
+    // is uint32_t rather than uint64_t because oversized values are pushed to
+    // the vLog, so the index only ever points at a small inline record or a
+    // small blob handle; the record's layout size always fits in 32 bits.
+    uint32_t data_size;
 };
 
 // Serializes an index block into a fixed 64KB, cache-friendly segment.
 //
 // Layout (little-endian):
 //   [header: slot_count(2B) | free_space_boundary(2B)]
-//   [forward: fixed 12B slots, one per entry]
+//   [forward: fixed 16B slots, one per entry]
 //       slot: key_local_offset(2B) | value_type(1B) | value_flag(1B) |
-//             data_global_offset(8B)
+//             data_size(4B) | data_global_offset(8B)
 //   [backward: variable-length payload, growing down from the end of the block]
 //       payload: key_length(2B) | key_bytes | timestamp(8B)
 //
@@ -95,8 +107,7 @@ class IndexBlockWriter {
 
     // Greatest key stored in this block (the last successfully added key), or
     // an empty view if no entry was stored.  Returned as a zero-copy view into
-    // this writer's buffer, so it is valid until reset()/destruction.  Use this
-    // as the separator when building the summary (top-level) index.
+    // this writer's buffer, so it is valid until reset()/destruction.
     std::string_view last_key() const noexcept {
         if (last_entry_offset_ < 0) { return std::string_view(); }
         const char *entry = buffer_ + last_entry_offset_;

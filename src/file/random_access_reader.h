@@ -22,9 +22,9 @@
 #include "anchordb/anchordb_namespace.h"
 #include "anchordb/env.h"
 #include "anchordb/status.h"
+#include "io_uring_config.h"
 #include "limiter.h"
 #include <cstdint>
-#include <liburing.h>
 #include <unistd.h>
 
 namespace ANCHORDB_NAMESPACE {

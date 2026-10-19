@@ -18,10 +18,40 @@
 // them.  Defining them here also anchors each class's vtable.
 
 #include "anchordb/env.h"
+#include "env/env_default.h"
+
+#include <atomic>
 
 #include "anchordb/anchordb_namespace.h"
 
 namespace ANCHORDB_NAMESPACE {
+
+namespace {
+std::atomic<Env *> g_default_env_override{nullptr};
+} // namespace
+
+Env *Env::default_env() {
+    // An installed override wins; it is set/cleared with acquire/release so a
+    // test can swap environments without data races.
+    Env *override_env = g_default_env_override.load(std::memory_order_acquire);
+    if (override_env != nullptr) { return override_env; }
+
+    // Function-local static: initialization is thread-safe in C++11 and later
+    // without a mutex, pthread_once, or call_once. After the first call the
+    // fast path is a single guard load and branch.
+    //
+    // The object is intentionally heap-allocated and never freed. Destroying
+    // it as a static would run PosixEnv's destructor (which tears down the
+    // io_uring rings and thread pool) during static teardown, possibly while
+    // other static destructors still use the Env. Leaking it avoids that
+    // destruction-order hazard; the OS reclaims it at process exit.
+    static Env *const platform_env = env_internal::create_default_env();
+    return platform_env;
+}
+
+void Env::set_default_env(Env *env) {
+    g_default_env_override.store(env, std::memory_order_release);
+}
 
 Env::~Env() = default;
 EnvWrapper::~EnvWrapper() = default;

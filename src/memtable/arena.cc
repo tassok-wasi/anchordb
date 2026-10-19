@@ -26,12 +26,10 @@ Arena::Arena(const uint32_t block_size)
       memory_usage_{0} {}
 
 Arena::~Arena() {
-    for (size_t i = 0; i < blocks_.size(); ++i) {
-        delete[] blocks_[i];
-    }
+    for (size_t i = 0; i < blocks_.size(); ++i) { delete[] blocks_[i]; }
 }
 
-inline char *Arena::allocate(size_t bytes) {
+char *Arena::allocate(size_t bytes) {
     assert(bytes > 0);
     if (bytes <= alloc_bytes_remaining_) {
         char *block = alloc_ptr_;
@@ -67,9 +65,7 @@ char *Arena::allocate_aligned(size_t bytes) {
 void Arena::reset() {
     if (!blocks_.empty()) {
         // Free all blocks except the first one
-        for (size_t i = 1; i < blocks_.size(); ++i) {
-            delete[] blocks_[i];
-        }
+        for (size_t i = 1; i < blocks_.size(); ++i) { delete[] blocks_[i]; }
 
         char *first_block = blocks_[0];
         blocks_.clear();
@@ -104,4 +100,4 @@ char *Arena::allocate_new_block(size_t block_bytes) {
     return block;
 }
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE
