@@ -5,6 +5,7 @@
     "zstd",
     "snappy",
     "lz4",
-    "zlib"
+    "zlib",
+    "gperftools"
   ]
 }
