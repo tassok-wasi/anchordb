@@ -133,15 +133,14 @@ class InternalKey {
 class LookUpKey {
   public:
     // Constructs a memtable key for the given user_key and sequence number.
-    // The value type is always TypeValue (used for point lookups).
+    // The value type is always ValueType::value (used for point lookups).
     LookUpKey(std::string_view user_key, seq_num sequence);
 
     LookUpKey(const LookUpKey &) = delete;
     LookUpKey &operator=(const LookUpKey &) = delete;
 
     ~LookUpKey() {
-        if (start_ != space_)
-            delete[] start_;
+        if (start_ != space_) delete[] start_;
     }
 
     // Returns the full memtable key including the varint32 length prefix.
@@ -230,6 +229,8 @@ class InternalKeyComparator {
     const Comparator *user_comparator_;
 };
 
+// Value-log pointer stored in an inline data record when ValueFlag::blob is
+// set: the vLog file id and the (offset, size) of the value within it.
 struct BlobHandle {
     uint64_t offset;
     uint32_t file_id;
@@ -253,4 +254,4 @@ inline bool parse_blob_handle(std::string_view *blob_handle,
            get_varint_32(blob_handle, &result->size);
 }
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

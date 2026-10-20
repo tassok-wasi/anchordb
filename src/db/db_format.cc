@@ -24,13 +24,12 @@
 namespace ANCHORDB_NAMESPACE {
 
 // Decodes the trailing 8 bytes of an internal key into sequence number and
-// value type. Layout: | user_key (n-8 bytes) | sequence (7 bytes, big-endian) |
-// type (1 byte) |
+// value type. Layout: | user_key (n-8 bytes) | sequence (7 bytes,
+// little-endian) | type (1 byte) |
 bool parse_internal_key(std::string_view internal_key,
                         ParsedInternalKey *result) {
     const size_t n = internal_key.size();
-    if (n < 8)
-        return false;
+    if (n < 8) return false;
 
     uint64_t num = decode_fixed_64(internal_key.data());
     uint8_t c = num & 0xff;
@@ -61,4 +60,4 @@ LookUpKey::LookUpKey(std::string_view user_key, seq_num seq) {
     end_ = dst;
 }
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE
