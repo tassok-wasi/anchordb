@@ -76,7 +76,7 @@ void cuckoo_create(const void *state_ptr, const std::string_view *keys,
 bool cuckoo_match(const void *state_ptr, std::string_view key,
                   std::string_view cuckoo_filter);
 
-inline Filter new_cuckoo_filter() {
+inline Filter make_cuckoo_filter() {
     return Filter{nullptr, &cuckoo_name, &cuckoo_create, &cuckoo_match,
                   nullptr};
 }

@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "sstable/table_cache.h"
 #include "anchordb/cache.h"
 #include "anchordb/status.h"
 #include "sstable/table.h"
-#include "sstable/table_cache.h"
 #include "util/coding.h"
 #include <string>
 #include <string_view>
@@ -35,6 +35,8 @@ Cache *make_cache(const Options &options) {
     case CacheType::ClockPro:
         return new_clock_pro_cache(options.table_cache_size,
                                    options.active_map);
+    case CacheType::Arc:
+        return new_arc_cache(options.table_cache_size, options.active_map);
     case CacheType::LRU:
     default: return new_lru_cache(options.table_cache_size, options.active_map);
     }

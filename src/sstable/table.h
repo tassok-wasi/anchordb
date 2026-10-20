@@ -25,12 +25,14 @@
 
 namespace ANCHORDB_NAMESPACE {
 
-// The three files that make up one SSTable's readable representation.  Names
-// are produced by the shared file-naming helpers in file/filename.h.
+// The files that make up one SSTable's readable representation.  Names are
+// produced by the shared file-naming helpers in file/filename.h.  `filter` is
+// empty for tables built without a filter.
 struct TableFileSet {
     std::string data;
     std::string index;
     std::string summary;
+    std::string filter;
 };
 
 // Builds the .data / .index / .summary file names for `table_number` under
@@ -41,17 +43,15 @@ TableFileSet make_table_file_set(std::string_view db_dir,
 class TableIterator;
 
 // Read-only view over one SSTable's index side.  A Table owns the parsed
-// summary (loaded fully into memory), random-access readers for the index and
-// data files, and the metadata needed to resolve a key to its data record.
+// summary, random-access readers for the index and data files, and the metadata
+// to resolve a key to its data record.
 //
-// Tables are created through open() and shared through manual reference
-// counting (ref()/unref(), mirroring MemTable).  A Table starts with one
-// reference held by open()'s caller; unref() deletes it at zero.  Once open a
-// Table is immutable and safe for concurrent readers.  Each get()/iterator must
-// use its own scratch buffers.
+// Tables are created through open() and shared via manual reference counting
+// (ref()/unref()).  open() returns one reference; unref() deletes at zero.
+// Once open a Table is immutable and safe for concurrent readers, but each
+// get()/iterator needs its own scratch buffers.
 //
-// All SSTable-specific state (summary reader, file readers, block accessors)
-// lives in the private Rep so this header stays free of the on-disk formats.
+// All SSTable-specific state lives in the private Rep.
 class Table {
   public:
     Table(const Table &) = delete;

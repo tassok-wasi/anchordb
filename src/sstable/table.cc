@@ -12,17 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "sstable/table.h"
 #include "anchordb/env.h"
 #include "anchordb/status.h"
 #include "file/filename.h"
 #include "sstable/data_record.h"
 #include "sstable/empty_iter.h"
+#include "sstable/filter_block.h"
 #include "sstable/idx_block_reader.h"
 #include "sstable/idx_block_writer.h"
 #include "sstable/idx_summary.h"
-#include "sstable/table.h"
 #include <cassert>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <string_view>
 
@@ -38,6 +40,9 @@ constexpr size_t kTableCacheEntryOverhead = 256;
 
 // Upper bound on a summary file we are willing to load into memory.
 constexpr uint64_t kMaxSummaryFileSize = 64ull * 1024 * 1024;
+
+// Upper bound on a filter file we are willing to load into memory.
+constexpr uint64_t kMaxFilterFileSize = 64ull * 1024 * 1024;
 
 // Reads exactly `n` bytes at `offset` into *buf and points *out at them.
 // Fails if fewer than `n` bytes are available.
@@ -95,15 +100,58 @@ struct Table::Rep {
         delete data_reader;
     }
 
-    // Reads the full 64KB index block starting at `block_offset`.
-    Status read_index_block(uint64_t block_offset, std::string *buf,
+    // Reads the index block at `block_offset` (on-disk length
+    // `compressed_size`, both from the summary) and decompresses it when a
+    // compressor is configured.  *out points into *stored_buf or *plain_buf,
+    // whichever holds the parseable block, so both must outlive its use.
+    Status read_index_block(uint64_t block_offset, uint32_t compressed_size,
+                            std::string *stored_buf, std::string *plain_buf,
                             std::string_view *out) const {
-        if (block_offset + kDefaultBlockSize > index_file_size) {
-            return Status::corruption("index block offset out of range",
+        *out = std::string_view();
+        if (block_offset > index_file_size ||
+            compressed_size > index_file_size - block_offset) {
+            return Status::corruption("index block out of range",
                                       std::to_string(block_offset));
         }
-        return read_exact(index_reader, block_offset, kDefaultBlockSize, buf,
-                          out);
+
+        std::string_view stored;
+        Status s = read_exact(index_reader, block_offset, compressed_size,
+                              stored_buf, &stored);
+        if (!s.is_ok()) { return s; }
+
+        if (compressor.uncompress == nullptr) {
+            // Blocks are stored verbatim as full block_size segments; anything
+            // else means the summary and index disagree.
+            if (stored.size() != block_size) {
+                return Status::corruption("index block not block sized",
+                                          std::to_string(stored.size()));
+            }
+            *out = stored;
+            return Status::ok();
+        }
+        if (compressor.get_uncompressed_length == nullptr) {
+            return Status::corruption("index block: compressor lacks length");
+        }
+
+        size_t uncompressed_size = 0;
+        if (!compressor.get_uncompressed_length(stored.data(), stored.size(),
+                                                &uncompressed_size)) {
+            return Status::corruption("index block: bad compressed length");
+        }
+        // Every index block decompresses to exactly the block size recorded in
+        // the summary header.
+        if (uncompressed_size != block_size) {
+            return Status::corruption(
+                "index block not block sized after decompression",
+                std::to_string(uncompressed_size));
+        }
+        plain_buf->resize(uncompressed_size);
+        if (!compressor.uncompress(stored.data(), stored.size(),
+                                   plain_buf->data())) {
+            return Status::corruption("index block decompression failed");
+        }
+        *out = std::string_view(plain_buf->data(), uncompressed_size);
+        return Status::ok();
     }
 
     // Reads and validates the data record referenced by `handle`,
@@ -156,19 +204,29 @@ struct Table::Rep {
     }
 
     Comparator comparator;
+    // Copied from Options; a null compressor means index blocks are stored
+    // verbatim and are parsed directly (see read_index_block).
+    Compressor compressor;
     std::string summary_buffer;
     SummaryIndexReader *summary = nullptr;
+    // Resident filter file bytes and its parsed reader.  `filter` is null when
+    // the table has no (usable) filter.
+    std::string filter_buffer;
+    std::unique_ptr<FilterBlockReader> filter;
     RandomAccessFileReader *index_reader = nullptr;
     RandomAccessFileReader *data_reader = nullptr;
     uint64_t index_file_size = 0;
     uint64_t data_file_size = 0;
     size_t block_count = 0;
+    // Index-block segment size, recovered from the summary header. Every index
+    // block is read and validated against it.
+    size_t block_size = 0;
 };
 
-// Bidirectional iterator over a Table, keeping one 64KB index block resident at
-// a time and transparently spanning block boundaries.  Tombstone entries are
-// filtered out; blob (vLog) values surface an error via status().  Internal to
-// this translation unit; callers only ever see the Iterator interface.
+// Bidirectional iterator over a Table, keeping one (possibly compressed) index
+// block resident at a time and spanning block boundaries.  Tombstone entries
+// are filtered out; blob (vLog) values surface an error via status().  Internal
+// to this translation unit.
 class TableIterator : public Iterator {
   public:
     TableIterator(Table *table, ReadOptions options)
@@ -219,12 +277,12 @@ class TableIterator : public Iterator {
             return;
         }
 
-        uint64_t block_offset = 0;
-        if (!table_->rep_->summary->seek(target, &block_offset)) {
+        const size_t block_index = table_->rep_->summary->lower_bound(target);
+        if (block_index >= table_->rep_->summary->size()) {
             invalidate();
             return;
         }
-        load_block(static_cast<size_t>(block_offset / kDefaultBlockSize));
+        load_block(block_index);
         if (!status_.is_ok()) { return; }
         slot_ = lower_bound(comparator_, *reader_, target);
         skip_forward();
@@ -285,16 +343,18 @@ class TableIterator : public Iterator {
         block_index_ = block_index;
         delete reader_;
         reader_ = nullptr;
-        std::string_view view;
+        // The summary gives this block's absolute offset and on-disk length.
+        const SummaryEntry &entry = table_->rep_->summary->entry(block_index);
+        std::string_view block;
         Status s = table_->rep_->read_index_block(
-            static_cast<uint64_t>(block_index) * kDefaultBlockSize, &block_buf_,
-            &view);
+            entry.block_offset, entry.compressed_size, &stored_buf_,
+            &plain_buf_, &block);
         if (!s.is_ok()) {
             status_ = s;
             invalidate();
             return;
         }
-        reader_ = new IndexBlockReader(view);
+        reader_ = new IndexBlockReader(block, table_->rep_->block_size);
         if (!reader_->valid()) {
             status_ = Status::corruption("invalid index block");
             invalidate();
@@ -394,7 +454,10 @@ class TableIterator : public Iterator {
 
     size_t block_index_ = 0;
     IndexBlockReader *reader_ = nullptr;
-    std::string block_buf_;
+    // On-disk (compressed) bytes of the resident block and, when decompressed,
+    // the plain bytes the reader parses.
+    std::string stored_buf_;
+    std::string plain_buf_;
 
     size_t slot_ = 0;
     bool valid_ = false;
@@ -412,6 +475,7 @@ TableFileSet make_table_file_set(std::string_view db_dir,
     set.data = TableDataFileName(db_dir, table_number);
     set.index = TableIndexFileName(db_dir, table_number);
     set.summary = TableSummaryFileName(db_dir, table_number);
+    set.filter = TableFilterFileName(db_dir, table_number);
     return set;
 }
 
@@ -437,19 +501,14 @@ Status Table::open(const Options &options, const TableFileSet &files,
         return Status::corruption("summary file too large",
                                   std::to_string(summary_size));
     }
-    if (index_size % kDefaultBlockSize != 0) {
-        return Status::corruption("index file not block aligned",
-                                  std::to_string(index_size));
-    }
-
     Rep *rep = new Rep();
     rep->comparator = options.comparator;
     if (rep->comparator.compare == nullptr) {
         rep->comparator = new_byte_wise_comparator();
     }
+    rep->compressor = options.compressor;
     rep->index_file_size = index_size;
     rep->data_file_size = data_size;
-    rep->block_count = static_cast<size_t>(index_size / kDefaultBlockSize);
 
     RandomAccessFileReader *raw_index = nullptr;
     s = options.env->new_random_access_file_reader(files.index, &raw_index);
@@ -489,9 +548,56 @@ Status Table::open(const Options &options, const TableFileSet &files,
         delete rep;
         return Status::corruption("invalid summary index");
     }
-    if (rep->summary->size() != rep->block_count) {
-        delete rep;
-        return Status::corruption("summary/index block count mismatch");
+    // The summary header pins the index-block segment size for this table.
+    rep->block_size = rep->summary->block_size();
+    // The summary is the source of truth for the block layout: it names the
+    // block count and, per block, the absolute offset and on-disk length.
+    // Validate every entry maps inside index.bin.
+    for (size_t i = 0; i < rep->summary->size(); ++i) {
+        const SummaryEntry &entry = rep->summary->entry(i);
+        if (entry.compressed_size == 0 || entry.block_offset > index_size ||
+            entry.compressed_size > index_size - entry.block_offset) {
+            delete rep;
+            return Status::corruption("summary entry out of range",
+                                      std::to_string(entry.block_offset));
+        }
+    }
+    rep->block_count = rep->summary->size();
+
+    // The per-table filter is optional: a table may have been built without
+    // one, so a missing or unreadable filter disables filtering instead of
+    // failing the open.  Skip the file entirely when no usable filter is
+    // configured.
+    const bool filter_configured = options.filter.key_may_match != nullptr &&
+                                   options.filter.name != nullptr;
+    if (filter_configured && !files.filter.empty()) {
+        uint64_t filter_size = 0;
+        Status fs = options.env->get_file_size(files.filter, &filter_size);
+        if (fs.is_ok() && filter_size > 0) {
+            if (filter_size > kMaxFilterFileSize) {
+                delete rep;
+                return Status::corruption("filter file too large",
+                                          std::to_string(filter_size));
+            }
+            RandomAccessFileReader *raw_filter = nullptr;
+            fs = options.env->new_random_access_file_reader(files.filter,
+                                                            &raw_filter);
+            if (!fs.is_ok()) {
+                delete rep;
+                return fs;
+            }
+            std::string_view filter_view;
+            fs = read_exact(raw_filter, 0, static_cast<size_t>(filter_size),
+                            &rep->filter_buffer, &filter_view);
+            delete raw_filter;
+            if (!fs.is_ok()) {
+                delete rep;
+                return fs;
+            }
+            auto reader = std::make_unique<FilterBlockReader>(
+                options.filter, rep->filter_buffer);
+            if (reader->valid()) { rep->filter = std::move(reader); }
+        }
     }
 
     Table *table = new Table(rep);
@@ -512,7 +618,8 @@ void Table::unref() {
 }
 
 size_t Table::cache_charge() const {
-    return rep_->summary_buffer.size() + kTableCacheEntryOverhead;
+    return rep_->summary_buffer.size() + rep_->filter_buffer.size() +
+           kTableCacheEntryOverhead;
 }
 
 Status Table::get(const ReadOptions &options, std::string_view key,
@@ -525,17 +632,25 @@ Status Table::get(const ReadOptions &options, std::string_view key,
         return Status::invalid_argument("Table::get: null scratch");
     }
 
-    uint64_t block_offset = 0;
-    if (!rep_->summary->seek(key, &block_offset)) {
-        return Status::not_found("key not in table range", std::string(key));
+    // A definite filter miss means the key is absent, so skip all I/O.
+    if (rep_->filter != nullptr && !rep_->filter->key_may_match(key)) {
+        return Status::not_found("key not in table filter", std::string(key));
     }
 
-    std::string block_buf;
+    const size_t block_index = rep_->summary->lower_bound(key);
+    if (block_index >= rep_->summary->size()) {
+        return Status::not_found("key not in table range", std::string(key));
+    }
+    const SummaryEntry &entry = rep_->summary->entry(block_index);
+
+    std::string stored_buf;
+    std::string plain_buf;
     std::string_view block;
-    Status s = rep_->read_index_block(block_offset, &block_buf, &block);
+    Status s = rep_->read_index_block(entry.block_offset, entry.compressed_size,
+                                      &stored_buf, &plain_buf, &block);
     if (!s.is_ok()) { return s; }
 
-    IndexBlockReader reader(block);
+    IndexBlockReader reader(block, rep_->block_size);
     if (!reader.valid()) { return Status::corruption("invalid index block"); }
 
     const size_t slot = lower_bound(rep_->comparator, reader, key);

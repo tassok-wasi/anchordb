@@ -36,6 +36,9 @@
 
 namespace ANCHORDB_NAMESPACE {
 
+// ARC (Adaptive Replacement Cache).  Resident entries live in T1 (recent) or
+// T2 (frequent); evicted entries become "ghosts" in B1/B2 whose hit pattern
+// adapts the target size p_ of T1.
 class ARCCache {
   public:
     explicit ARCCache(size_t capacity = 0, MapType t = MapType::Swiss)
@@ -47,8 +50,7 @@ class ARCCache {
         case MapType::RobbinHood:
             map_.emplace<RobinHoodMap<ARCHandle *>>(capacity_);
             break;
-        case MapType::Swiss:
-            map_.emplace<SwissMap<ARCHandle *>>(capacity_);
+        case MapType::Swiss: map_.emplace<SwissMap<ARCHandle *>>(capacity_);
         }
     }
 
@@ -95,10 +97,9 @@ class ARCCache {
 
     void set_capacity(size_t capacity) { capacity_ = capacity; }
 
-    Cache::Handle *insert(std::string_view key, uint64_t hash,
-                          void *value, size_t charge,
-                          void (*deleter)(std::string_view key,
-                                          void *value));
+    Cache::Handle *insert(std::string_view key, uint64_t hash, void *value,
+                          size_t charge,
+                          void (*deleter)(std::string_view key, void *value));
     Cache::Handle *lookup(std::string_view key, uint64_t hash);
     void release(Cache::Handle *handle);
     void erase(std::string_view key, uint64_t hash);
@@ -141,6 +142,8 @@ class ARCCache {
         map_;
 };
 
+// Shards an ARC cache across kNumShards independent sub-caches, picking the
+// shard from the top hash bits.
 class ShardedARCCache : public Cache {
   public:
     explicit ShardedARCCache(size_t capacity, MapType t) : last_id_(0) {
@@ -187,9 +190,7 @@ class ShardedARCCache : public Cache {
     }
 
     void prune() override {
-        for (int s = 0; s < kNumShards; s++) {
-            shard_[s].prune();
-        }
+        for (int s = 0; s < kNumShards; s++) { shard_[s].prune(); }
     }
 
     size_t total_charge() const override {
@@ -215,6 +216,4 @@ class ShardedARCCache : public Cache {
     }
 };
 
-Cache *new_arc_cache(size_t capacity, MapType t = MapType::Swiss);
-
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

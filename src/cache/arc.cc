@@ -31,6 +31,8 @@ void ARCCache::remove_ghost_(ARCHandle *e) {
     free(e);
 }
 
+// Evicts one resident entry from T1 or T2 into the matching ghost list,
+// following ARC's REPLACE rule (T1 if it exceeds its target p_).
 void ARCCache::replace(const HashedKey &key, bool in_b2) {
     size_t t1_size = t1_lru_.size() + t1_in_use_.size();
     if (t1_size > 0 && ((t1_size > p_) || (in_b2 && t1_size == p_))) {
@@ -222,12 +224,8 @@ void ARCCache::prune() {
     purge_lru(t1_lru_);
     purge_lru(t2_lru_);
 
-    while (!b1_.is_empty()) {
-        remove_ghost_(b1_.back());
-    }
-    while (!b2_.is_empty()) {
-        remove_ghost_(b2_.back());
-    }
+    while (!b1_.is_empty()) { remove_ghost_(b1_.back()); }
+    while (!b2_.is_empty()) { remove_ghost_(b2_.back()); }
     mutex_.unlock();
 }
 
@@ -253,9 +251,7 @@ void ARCCache::unref(ARCHandle *e) {
     e->refs--;
     if (e->refs == 0) {
         assert(!e->in_cache);
-        if (e->value != nullptr) {
-            (*e->deleter)(e->key(), e->value);
-        }
+        if (e->value != nullptr) { (*e->deleter)(e->key(), e->value); }
         free(e);
     } else if (e->in_cache && e->refs == 1) {
         HashedKey k{e->key(), e->hash};
@@ -299,4 +295,4 @@ Cache *new_arc_cache(size_t capacity, MapType t) {
     return new ShardedARCCache(capacity, t);
 }
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

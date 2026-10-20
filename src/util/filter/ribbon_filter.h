@@ -74,7 +74,7 @@ inline void ribbon_destroy(const void *state_ptr) {
     delete static_cast<const RibbonState *>(state_ptr);
 }
 
-inline Filter new_ribbon_filter_filter(size_t bits_per_key) {
+inline Filter make_ribbon_filter(size_t bits_per_key) {
     size_t bits_per_key_ = (bits_per_key >= 2) ? bits_per_key : 10;
     auto *state = new RibbonState{bits_per_key_};
     return Filter{state, &ribbon_name, &ribbon_create, &ribbon_match,

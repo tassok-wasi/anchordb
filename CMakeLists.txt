@@ -12,6 +12,9 @@ option(ANCHORDB_USE_IO_URING
 option(ANCHORDB_DIRECT_IO_DEFAULT
     "Open files with O_DIRECT by default in the POSIX environment"
     ON)
+option(ANCHORDB_USE_TCMALLOC
+    "Link tcmalloc process-wide so global new/delete route through it"
+    ON)
 
 
 add_library(anchordb STATIC)
@@ -25,7 +28,6 @@ target_sources(anchordb
             include
         FILES
             include/anchordb/anchordb_namespace.h
-            include/anchordb/macro.h
             include/anchordb/export.h
             include/anchordb/comparator.h
             include/anchordb/compressor.h
@@ -39,10 +41,8 @@ target_sources(anchordb
 
 target_sources(anchordb
     PRIVATE
-        src/memtable/arena.h
-        src/memtable/arena.cc
-        src/memtable/mwmr_skiplist.h
-        src/memtable/swsr_skiplist.h
+        src/memory/arena.h
+        src/memory/arena.cc
         src/memtable/skiplist.h
         src/memtable/table.h
         src/memtable/table.cc
@@ -69,9 +69,11 @@ target_sources(anchordb
         src/util/filter/cuckoo_filter.cc
         src/util/filter/ribbon_filter.h
         src/util/filter/ribbon_filter.cc
+        src/util/filter/filter.cc
         src/db/db_format.h
         src/db/db_format.cc
         src/db/iterator.cc
+        src/db/wal_format.h
         src/db/wal_reader.h
         src/db/wal_reader.cc
         src/db/wal_writer.h
@@ -110,6 +112,8 @@ target_sources(anchordb
         src/sstable/idx_block_writer.h
         src/sstable/idx_table_builder.cc
         src/sstable/idx_table_builder.h
+        src/sstable/filter_block.cc
+        src/sstable/filter_block.h
         src/sstable/idx_summary.cc
         src/sstable/idx_summary.h
         src/sstable/table.cc
@@ -144,7 +148,7 @@ elseif (UNIX AND NOT APPLE)
             src/file/lock_table.h
             src/file/random_access_reader.cc
             src/file/random_access_reader.h
-            src/file/seqeuntial_reader.h
+            src/file/sequential_reader.h
             src/file/sequential_reader.cc
             src/file/writer.cc
             src/file/writer.h
@@ -257,6 +261,26 @@ if(ZLIB_FOUND)
     message(STATUS "ZLIB found! Enabling ZLIB block compression.")
 else()
     message(STATUS "ZLIB NOT found. Disabling ZLIB support.")
+endif()
+
+# ---------- tcmalloc (process-wide allocator) ----------
+# Linked PUBLIC so the override reaches every consumer of anchordb. Linking
+# libtcmalloc interposes the global operator new/delete and malloc/free, so the
+# Arena's blocks and any other heap allocation are served by tcmalloc instead of
+# the OS allocator. No wrapper type is involved.
+if(ANCHORDB_USE_TCMALLOC)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(TCMALLOC libtcmalloc)
+    if(TCMALLOC_FOUND)
+        target_link_libraries(anchordb PUBLIC ${TCMALLOC_LIBRARIES})
+        target_include_directories(anchordb PUBLIC ${TCMALLOC_INCLUDE_DIRS})
+        message(STATUS "tcmalloc found! Linking it globally as the allocator.")
+    else()
+        message(WARNING
+            "tcmalloc not found; falling back to the system allocator.")
+    endif()
+else()
+    message(STATUS "ANCHORDB_USE_TCMALLOC=OFF: using the system allocator")
 endif()
 
 # ---------- testing not set up yet ----------

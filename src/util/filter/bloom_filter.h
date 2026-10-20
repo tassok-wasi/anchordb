@@ -46,7 +46,7 @@ inline void bloom_destroy(const void *state_ptr) {
     delete static_cast<const BloomFilterState *>(state_ptr);
 }
 
-inline Filter new_bloom_filter(size_t bits_per_key) {
+inline Filter make_bloom_filter(size_t bits_per_key) {
     size_t bits_per_key_ = (bits_per_key > 0) ? bits_per_key : 10;
     // k = bits_per_key * ln(2)  ≈  bits_per_key * 0.69
     size_t k_ = static_cast<size_t>(static_cast<double>(bits_per_key_) * 0.69);
@@ -54,7 +54,7 @@ inline Filter new_bloom_filter(size_t bits_per_key) {
     if (k_ > 30) k_ = 30;
     auto *state = new BloomFilterState{bits_per_key_, k_};
 
-    return Filter{&state, &bloom_name, &bloom_create, &bloom_match,
+    return Filter{state, &bloom_name, &bloom_create, &bloom_match,
                   &bloom_destroy};
 }
 

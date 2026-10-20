@@ -35,6 +35,7 @@ enum class FileType : uint8_t {
     kCurrentFile,      // <db>/CURRENT           points at the live MANIFEST
     kLockFile,         // <db>/LOCK              single-process lock
     kInfoLogFile,      // <db>/LOG               human-readable info log
+    kTableFilterFile,  // <db>/<number>.filter   SSTable key filter
 };
 
 // Builds "<dbname>/<number zero-padded to 6><suffix>".  `dbname` may be empty,
@@ -48,6 +49,7 @@ std::string LogFileName(std::string_view dbname, uint64_t number);
 std::string TableDataFileName(std::string_view dbname, uint64_t number);
 std::string TableIndexFileName(std::string_view dbname, uint64_t number);
 std::string TableSummaryFileName(std::string_view dbname, uint64_t number);
+std::string TableFilterFileName(std::string_view dbname, uint64_t number);
 std::string VLogFileName(std::string_view dbname, uint64_t number);
 std::string DescriptorFileName(std::string_view dbname, uint64_t number);
 std::string TempFileName(std::string_view dbname, uint64_t number);

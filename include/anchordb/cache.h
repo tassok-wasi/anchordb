@@ -24,6 +24,24 @@
 
 namespace ANCHORDB_NAMESPACE {
 
+// Abstract in-memory block cache.
+//
+// A Cache maps keys to caller-owned values and tracks a single `charge` per
+// entry (typically the entry's approximate size in bytes) so implementations
+// can bound total memory.  Values are opaque to the cache: it never inspects or
+// frees them directly, calling the supplied `deleter` instead.
+//
+// Entry lifetime: insert()/lookup() return a Handle that pins the entry.  The
+// caller must pass that handle to release() once done.  An entry is only
+// reclaimed by the cache (or by erase()) after every outstanding handle has
+// been released.
+//
+// Thread-safety: implementations are internally synchronized; a single Cache
+// may be shared across threads.  A given Handle, however, is not thread-safe
+// and must be released on the same Cache it came from.
+//
+// Obtain an instance via new_lru_cache(), new_lirs_cache() or
+// new_clock_pro_cache().
 class ANCHORDB_EXPORT Cache {
   public:
     Cache() = default;
@@ -33,61 +51,61 @@ class ANCHORDB_EXPORT Cache {
 
     virtual ~Cache();
 
+    // Opaque, implementation-defined token identifying one cached entry.  Treat
+    // it as an opaque pointer; its layout is private to the implementation.
     struct Handle {};
 
-    // insert a mapping from key->value into the cache and assign it
-    // the specified charge against the total cache capacity.
+    // Inserts the mapping key -> value, charging `charge` against the cache's
+    // capacity, and returns a handle the caller must later release().
     //
-    // Returns a handle that corresponds to the mapping.  The caller
-    // must call this->release(handle) when the returned mapping is no
-    // longer needed.
-    //
-    // When the inserted entry is no longer needed, the key and
-    // value will be passed to "deleter".
+    // If an entry for `key` already exists it is replaced.  `deleter` is
+    // invoked with the key and value when the entry is finally evicted, erased
+    // or destroyed; it is responsible for freeing `value`.
     virtual Handle *insert(std::string_view key, void *value, size_t charge,
                            void (*deleter)(std::string_view key,
                                            void *value)) = 0;
 
-    // If the cache has no mapping for "key", returns nullptr.
-    //
-    // Else return a handle that corresponds to the mapping.  The caller
-    // must call this->release(handle) when the returned mapping is no
-    // longer needed.
+    // Returns a handle for the cached mapping of `key`, or nullptr on a miss.
+    // The caller must release() the returned handle when it is no longer
+    // needed.
     virtual Handle *lookup(std::string_view key) = 0;
 
-    // Release a mapping returned by a previous lookup().
-    // REQUIRES: handle must not have been released yet.
-    // REQUIRES: handle must have been returned by a method on *this.
+    // Releases a handle previously returned by insert() or lookup().  The entry
+    // becomes reclaimable once its last handle is released.
+    // REQUIRES: `handle` has not already been released.
     virtual void release(Handle *handle) = 0;
 
-    // Return the value encapsulated in a handle returned by a
-    // successful lookup().
-    // REQUIRES: handle must not have been released yet.
-    // REQUIRES: handle must have been returned by a method on *this.
+    // Returns the value stored for a handle returned by insert()/lookup().
+    // REQUIRES: `handle` has not already been released.
     virtual void *value(Handle *handle) = 0;
 
-    // If the cache contains entry for key, erase it.  Note that the
-    // underlying entry will be kept around until all existing handles
-    // to it have been released.
+    // Removes the mapping for `key`, if present.  The entry itself is kept
+    // alive until every outstanding handle to it has been released.
     virtual void erase(std::string_view key) = 0;
 
-    // Return a new numeric id.  May be used by multiple clients who are
-    // sharing the same cache to partition the key space.  Typically the
-    // client will allocate a new id at startup and prepend the id to
-    // its cache keys.
+    // Returns a fresh numeric id, unique within this cache instance.  Clients
+    // that share one cache can partition the key space by allocating an id up
+    // front and prefixing it to their keys.
     virtual uint64_t new_id() = 0;
 
-    // Remove all cache entries that are not actively in use. Memory-constrained
-    // applications may wish to call this method to reduce memory usage.
+    // Discards entries that are not currently pinned by a handle, reducing
+    // memory usage on memory-constrained machines.
     virtual void prune() = 0;
 
-    // Return an estimate of the combined charges of all elements stored in the
+    // Returns the combined charge of all entries currently resident in the
     // cache.
     virtual size_t total_charge() const = 0;
 };
 
+// Creates a cache using the LRU replacement policy.  `capacity` bounds the sum
+// of entry charges; `t` selects the hash-map backend used for the index.
 ANCHORDB_EXPORT Cache *new_lru_cache(size_t capacity, MapType t);
+// Creates a cache using the LIRS replacement policy (see src/cache/lirs.h).
 ANCHORDB_EXPORT Cache *new_lirs_cache(size_t capacity, MapType t);
+// Creates a cache using the CLOCK-Pro replacement policy (see
+// src/cache/clock_pro.h).
 ANCHORDB_EXPORT Cache *new_clock_pro_cache(size_t capacity, MapType t);
+// Creates a cache using the ARC replacement policy (see src/cache/arc.h).
+ANCHORDB_EXPORT Cache *new_arc_cache(size_t capacity, MapType t);
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

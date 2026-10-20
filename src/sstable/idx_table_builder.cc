@@ -26,8 +26,14 @@
 
 namespace ANCHORDB_NAMESPACE {
 
-IndexTableBuilder::IndexTableBuilder(const Comparator &comparator)
-    : comparator_(comparator) {
+IndexTableBuilder::IndexTableBuilder(size_t block_size,
+                                     const Comparator &comparator,
+                                     Compressor compressor,
+                                     int compression_level, Filter filter)
+    : comparator_(comparator), compressor_(compressor),
+      compression_level_(compression_level), block_writer_(block_size),
+      summary_(static_cast<uint32_t>(block_writer_.block_size())),
+      filter_builder_(filter) {
     if (comparator_.compare == nullptr) {
         comparator_ = new_byte_wise_comparator();
     }
@@ -40,12 +46,11 @@ Status IndexTableBuilder::add(std::string_view key, const ValueHandle &handle,
             "index table builder: already finished");
     }
 
-    // Reject entries that could never fit in a single 64KB block, so the retry
-    // after a flush below is guaranteed to succeed.
+    // Reject entries that could never fit in a single (configurable) block, so
+    // the retry after a flush below is guaranteed to succeed.
     const size_t payload_size =
-        sizeof(uint16_t) + key.size() + sizeof(uint64_t);
-    if (key.size() > UINT16_MAX ||
-        payload_size > static_cast<size_t>(kDefaultBlockSize)) {
+        sizeof(uint32_t) + key.size() + sizeof(uint64_t);
+    if (key.size() > UINT32_MAX || payload_size > block_writer_.block_size()) {
         return Status::invalid_argument("index table builder: key too large");
     }
 
@@ -78,6 +83,7 @@ Status IndexTableBuilder::add(std::string_view key, const ValueHandle &handle,
     last_key_.assign(key);
     last_timestamp_ = timestamp;
     ++entry_count_;
+    filter_builder_.add_key(key);
     return Status::ok();
 }
 
@@ -89,7 +95,7 @@ Status IndexTableBuilder::add(std::string_view key, ValueType type,
 
 size_t IndexTableBuilder::size_estimate() const {
     return index_.size() + summary_.byte_size() +
-           (block_writer_.empty() ? 0 : IndexBlockWriter::block_size());
+           (block_writer_.empty() ? 0 : block_writer_.block_size());
 }
 
 Status IndexTableBuilder::emit_block() {
@@ -97,17 +103,33 @@ Status IndexTableBuilder::emit_block() {
 
     const uint64_t block_offset = index_.size();
     const std::string_view block = block_writer_.finish();
-    assert(block.size() == IndexBlockWriter::block_size());
+    assert(block.size() == block_writer_.block_size());
 
-    // Record this block in the summary before the writer is reset (last_key()
-    // is a view into the writer's buffer).  Keys accepted by add() are at most
-    // UINT16_MAX bytes, so this can only fail on an internal invariant break.
-    if (!summary_.add(block_writer_.last_key(), block_offset)) {
+    // Compress when configured; the summary records the stored (compressed)
+    // length so the reader can fetch exactly this block back.
+    std::string_view stored = block;
+    if (compressor_.compress != nullptr) {
+        if (!compressor_.compress(block.data(), block.size(),
+                                  &compressed_block_, compression_level_)) {
+            return Status::io_error(std::string_view(
+                "index table builder: index block compression failed"));
+        }
+        stored = compressed_block_;
+    }
+    if (stored.size() > UINT32_MAX) {
+        return Status::invalid_argument(
+            "index table builder: stored index block too large");
+    }
+
+    // Record the block in the summary before the writer is reset (last_key()
+    // is a view into the writer's buffer).
+    if (!summary_.add(block_writer_.last_key(), block_offset,
+                      static_cast<uint32_t>(stored.size()))) {
         return Status::invalid_argument(
             "index table builder: separator key too large for summary index");
     }
 
-    index_.append(block.data(), block.size());
+    index_.append(stored.data(), stored.size());
     ++block_count_;
     block_writer_.reset();
     return Status::ok();
@@ -129,6 +151,7 @@ Status IndexTableBuilder::finish(IndexTableContents *out) {
     out->index = index_;
     const std::string_view summary = summary_.finish();
     out->summary.assign(summary.data(), summary.size());
+    out->filter = filter_builder_.finish();
     out->block_count = block_count_;
     out->entry_count = entry_count_;
     return Status::ok();

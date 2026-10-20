@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "anchordb/anchordb_namespace.h"
 #include "ribbon_filter.h"
+#include "anchordb/anchordb_namespace.h"
 #include <algorithm>
 #include <bit>
 #include <cstddef>
@@ -119,8 +119,8 @@ void ribbon_create(const void *state_ptr, const std::string_view *keys,
     }
 }
 
-bool ribbon_match(const void *state_ptr, const std::string_view &key,
-                  const std::string_view &ribbon_filter) {
+bool ribbon_match(const void *state_ptr, std::string_view key,
+                  std::string_view ribbon_filter) {
     const size_t len = ribbon_filter.size();
     // Need at least 1 header byte + enough room for a ribbon.
     if (len <= k_ribbon_width + 1) return false;

@@ -80,6 +80,10 @@ std::string TableSummaryFileName(std::string_view dbname, uint64_t number) {
     return MakeFileName(dbname, number, ".summary");
 }
 
+std::string TableFilterFileName(std::string_view dbname, uint64_t number) {
+    return MakeFileName(dbname, number, ".filter");
+}
+
 std::string VLogFileName(std::string_view dbname, uint64_t number) {
     return MakeFileName(dbname, number, ".vlog");
 }
@@ -115,6 +119,7 @@ std::string FileName(std::string_view dbname, uint64_t number, FileType type) {
     case FileType::kTableIndexFile: return TableIndexFileName(dbname, number);
     case FileType::kTableSummaryFile:
         return TableSummaryFileName(dbname, number);
+    case FileType::kTableFilterFile: return TableFilterFileName(dbname, number);
     case FileType::kVLogFile: return VLogFileName(dbname, number);
     case FileType::kDescriptorFile: return DescriptorFileName(dbname, number);
     case FileType::kTempFile: return TempFileName(dbname, number);
@@ -171,6 +176,8 @@ bool ParseFileName(std::string_view filename, uint64_t *number,
         *type = FileType::kTableIndexFile;
     } else if (rest == ".summary") {
         *type = FileType::kTableSummaryFile;
+    } else if (rest == ".filter") {
+        *type = FileType::kTableFilterFile;
     } else if (rest == ".vlog") {
         *type = FileType::kVLogFile;
     } else if (rest == ".dbtmp") {
