@@ -12,23 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Out-of-line definitions for the abstract Env/IO base classes.  These
-// destructors are declared in the public env.h but were never defined, so any
-// program that installs a concrete Env (e.g. PosixEnv) fails to link without
-// them.  Defining them here also anchors each class's vtable.
-
 #pragma once
 
 #include "anchordb/anchordb_namespace.h"
 #include "anchordb/env.h"
 #include "file_meta.h"
-#include "io_uring_config.h"
+#include "io_uring_config.h" // IWYU pragma: keep
 #include "util/aligned_buffer.h"
 #include <unistd.h>
 
 namespace ANCHORDB_NAMESPACE {
 
-// Sequential read via io_uring. Not thread-safe.
+// Sequential reader backed by io_uring, falling back to read(2).  Not
+// thread-safe.  When `buf` is supplied it is used as the O_DIRECT bounce
+// buffer; otherwise one is allocated on demand.
 class PosixSequentialFileReader final : public SequentialFileReader {
   public:
     PosixSequentialFileReader(std::string filename, int fd,
