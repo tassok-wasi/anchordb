@@ -16,8 +16,8 @@
 
 #include "anchordb/iterator.h"
 #include "anchordb/status.h"
-#include "arena.h"
 #include "db/db_format.h"
+#include "memory/arena.h"
 #include "memtable/skiplist.h"
 #include <cassert>
 #include <cstddef>
@@ -100,7 +100,7 @@ class MemtableIterator : public Iterator {
     std::string tmp_; // scratch buffer for seek key encoding
 };
 
-// In-memory table backed by a skiplist and arena allocator.
+// In-memory table backed by a skiplist and arena.
 class MemTable {
   public:
     explicit MemTable(const Comparator comparator,
@@ -124,8 +124,13 @@ class MemTable {
 
     Iterator *new_iterator() { return new MemtableIterator(&table_); }
 
+    // Inserts one entry.  Not thread-safe: writers must be serialized.
     void add(seq_num seq, ValueType type, std::string_view key,
              std::string_view value);
+
+    // Looks up `key`.  Returns true and fills *value for a live entry, false
+    // with *s set to not_found for a tombstone, or false with *s untouched when
+    // the key is absent.
     bool get(const LookUpKey &key, std::string *value, Status *s);
 
   private:

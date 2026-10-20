@@ -20,12 +20,12 @@ namespace ANCHORDB_NAMESPACE {
 
 void MemTable::add(seq_num seq, ValueType type, std::string_view key,
                    std::string_view value) {
-    // Format of an entry is concatenation of:
-    //  key_size     : varint32 of internal_key.size()
-    //  key bytes    : char[internal_key.size()]
-    //  tag          : uint64((sequence << 8) | type)
-    //  value_size   : varint32 of value.size()
-    //  value bytes  : flag + char[value.size() - 1]
+    // Entry layout:
+    //  internal_key_size : varint32
+    //  user_key          : char[key_size]
+    //  tag               : uint64((sequence << 8) | type)
+    //  value_size        : varint32
+    //  value             : char[value_size]
     size_t key_size = key.size();
     size_t value_size = value.size();
     size_t internal_key_size = key_size + 8;
@@ -48,12 +48,12 @@ bool MemTable::get(const LookUpKey &key, std::string *value, Status *s) {
     typename Table::Iterator iter(&table_);
     iter.seek(mem_key.data());
     if (iter.valid()) {
-        // entry format is:
-        //    klength  : varint32
-        //    userkey  : char[klength]
-        //    tag      : uint64
-        //    vlength  : varint32
-        //    value    : flag + char[vlength - 1]
+        // Entry layout:
+        //    internal_key_size : varint32
+        //    user_key          : char[internal_key_size - 8]
+        //    tag               : uint64
+        //    value_size        : varint32
+        //    value             : char[value_size]
         const char *entry = iter.key();
         uint32_t key_len;
         const char *key_ptr = get_varint_32_ptr(entry, entry + 5, &key_len);
@@ -76,4 +76,4 @@ bool MemTable::get(const LookUpKey &key, std::string *value, Status *s) {
     return false;
 }
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

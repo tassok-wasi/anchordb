@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "arena.h"
+#include "memory/arena.h"
+
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -78,6 +79,8 @@ void Arena::reset() {
 }
 
 char *Arena::allocate_fallback(size_t bytes) {
+    // Oversized requests get a dedicated block; everything else takes a fresh
+    // standard-size block.
     if (bytes > k_block_size_ / 4) {
         char *block = allocate_new_block(bytes);
         return block;

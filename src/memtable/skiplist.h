@@ -14,20 +14,18 @@
 
 #pragma once
 
-#include "arena.h"
+#include "memory/arena.h"
 #include "util/random.h"
 #include <atomic>
 #include <cassert>
 #include <cstddef>
-#include <string_view>
 
 #include "anchordb/anchordb_namespace.h"
 
 namespace ANCHORDB_NAMESPACE {
 
-// previously as `Skiplist_SWMR`. options for multiple variant of skiplist will
-// be removed in the future.
-
+// Single-writer/multi-reader skiplist.  Nodes are arena-allocated; concurrent
+// readers are supported, but the caller must serialize writers.
 template <typename Key, class Cmp> class Skiplist {
   private:
     struct Node {
@@ -43,7 +41,7 @@ template <typename Key, class Cmp> class Skiplist {
 
   public:
     explicit Skiplist(Cmp cmp, Arena *arena)
-        : cmp_(cmp), arena_(arena), curr_height_{0}, rnd_(0xdeadbeef) {
+        : arena_(arena), cmp_(cmp), curr_height_{0}, rnd_(0xdeadbeef) {
         head_ = new_node_(0, k_max_height_);
         for (int i = 0; i <= k_max_height_; ++i) {
             head_->forward_[i].store(nullptr, std::memory_order_relaxed);
@@ -52,28 +50,12 @@ template <typename Key, class Cmp> class Skiplist {
 
     ~Skiplist() { clear_(); }
 
+    // Nodes are owned by the arena and the comparator may be non-assignable,
+    // so the list is neither copyable nor movable.
     Skiplist(const Skiplist &) = delete;
     Skiplist &operator=(const Skiplist &) = delete;
-
-    Skiplist(Skiplist &&other) noexcept
-        : cmp_(std::move(other.cmp_)), arena_(std::move(other.arena_)),
-          curr_height_{other.curr_height_.load()} {
-        other.head_ = nullptr;
-        other.curr_height_.store(0);
-    }
-
-    Skiplist &operator=(Skiplist &&other) noexcept {
-        if (this != &other) {
-            clear_();
-
-            cmp_ = std::move(other.cmp_);
-            arena_ = std::move(other.arena_);
-            curr_height_.store(other.curr_height_.load());
-            other.head_ = nullptr;
-            other.curr_height_.store(0);
-        }
-        return *this;
-    }
+    Skiplist(Skiplist &&) = delete;
+    Skiplist &operator=(Skiplist &&) = delete;
 
     void insert(const Key &key);
     bool contains(const Key &key) const;
@@ -92,11 +74,6 @@ template <typename Key, class Cmp> class Skiplist {
         const Key &key() const {
             assert(valid());
             return node_->key_;
-        }
-
-        const std::string_view &value() const {
-            assert(valid());
-            return node_->value_;
         }
 
         void next() {
@@ -120,9 +97,7 @@ template <typename Key, class Cmp> class Skiplist {
 
         void seek_to_last() {
             node_ = list_->find_last_();
-            if (node_ == list_->head_) {
-                node_ = nullptr;
-            }
+            if (node_ == list_->head_) { node_ = nullptr; }
         }
 
       private:
@@ -134,8 +109,7 @@ template <typename Key, class Cmp> class Skiplist {
     Arena *arena_;
     Cmp cmp_;
 
-    int k_max_height_ = 12;
-    float prob_factor_ = 0.5f;
+    static constexpr int k_max_height_ = 12;
 
     std::atomic<int> curr_height_;
     Node *head_;
@@ -151,7 +125,6 @@ template <typename Key, class Cmp> class Skiplist {
 
     bool less_(const Key &a, const Key &b) const { return cmp_(a, b) < 0; }
     bool equal_(const Key &a, const Key &b) const { return cmp_(a, b) == 0; }
-    bool greater_(const Key &a, const Key &b) const { return cmp_(a, b) > 0; }
 };
 
 template <typename Key, class Comparator>
@@ -159,9 +132,7 @@ int Skiplist<Key, Comparator>::random_height_() {
     // Increase height with probability 1 in k_branching
     static const unsigned int k_branching = 4;
     int height = 1;
-    while (height < k_max_height_ && rnd_.one_in(k_branching)) {
-        height++;
-    }
+    while (height < k_max_height_ && rnd_.one_in(k_branching)) { height++; }
     assert(height > 0);
     assert(height <= k_max_height_);
     return height;
@@ -169,8 +140,8 @@ int Skiplist<Key, Comparator>::random_height_() {
 
 template <typename Key, class Comparator>
 void Skiplist<Key, Comparator>::clear_() {
-    if (!head_)
-        return;
+    if (!head_) return;
+    // Destroy nodes; their storage is owned by the arena, not freed here.
     Node *curr = head_->forward_[0].load(std::memory_order_relaxed);
     while (curr != nullptr) {
         Node *next = curr->forward_[0].load(std::memory_order_relaxed);
@@ -245,9 +216,7 @@ void Skiplist<Key, Comparator>::insert(const Key &key) {
 
     int new_level = random_height_();
     if (new_level > max_lvl) {
-        for (int i = max_lvl + 1; i <= new_level; ++i) {
-            update[i] = head_;
-        }
+        for (int i = max_lvl + 1; i <= new_level; ++i) { update[i] = head_; }
         curr_height_.store(new_level, std::memory_order_release);
     }
 
@@ -262,6 +231,7 @@ void Skiplist<Key, Comparator>::insert(const Key &key) {
             std::memory_order_relaxed);
     }
 
+    // Publish x into each level, then fix the old successor's back pointer.
     for (int i = 0; i <= new_level; ++i) {
         update[i]->forward_[i].store(x, std::memory_order_release);
     }
@@ -277,4 +247,4 @@ bool Skiplist<Key, Comparator>::contains(const Key &key) const {
     return x != nullptr && equal_(key, x->key_);
 }
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

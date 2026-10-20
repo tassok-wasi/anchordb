@@ -22,6 +22,13 @@
 
 namespace ANCHORDB_NAMESPACE {
 
+// Block-based bump ("arena") allocator.  Memory is handed out from large blocks
+// and never freed individually; the whole arena is reclaimed by `reset()` or
+// destruction, which makes it cheap to allocate many small, short-lived objects
+// (e.g. memtable skiplist nodes).
+//
+// Blocks come from the global `operator new[]`; tcmalloc is linked into the
+// final binary, so no per-call allocator wrapper is needed here.
 class Arena {
   public:
     explicit Arena(const uint32_t block_size);
@@ -51,7 +58,7 @@ class Arena {
     char *alloc_ptr_; // Pointer to the next free byte in the current block.
     size_t alloc_bytes_remaining_; // Bytes remaining in the current block.
     std::vector<char *> blocks_;   // All blocks owned by the arena.
-    const uint32_t k_block_size_ = 4096; // Default block size in bytes.
+    const uint32_t k_block_size_ = 4096; // configured block size, in bytes
 
     size_t memory_usage_; // Total memory allocated by the arena.
 };
