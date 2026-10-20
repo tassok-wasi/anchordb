@@ -21,14 +21,35 @@
 
 namespace ANCHORDB_NAMESPACE {
 
+// Ordering definition for user keys, expressed as plain function pointers so a
+// custom comparator needs no inheritance.
+//
+// A comparator is a pure 3-way comparison over raw key bytes.  The optional
+// separator/successor helpers are used to shrink index separator keys; leave
+// them null to use the byte-wise defaults.  All keys in a database must be
+// ordered consistently by the comparator that created it, and that comparator
+// must be supplied again when the database is reopened.
 struct ANCHORDB_EXPORT Comparator {
+    // Returns < 0 if a < b, 0 if a == b, > 0 if a > b.  Must be a strict weak
+    // ordering.
     int (*compare)(std::string_view a, std::string_view b) = nullptr;
+
+    // Returns a stable, human-readable name for the comparator (used for
+    // diagnostics and to detect a comparator mismatch).
     const char *(*name)() = nullptr;
+
+    // Given `*start` and `limit` (both >= *start), may replace `*start` with a
+    // shorter key `s` such that *start <= s < limit.  Used to compact index
+    // blocks.
     void (*find_shortest_separator)(std::string *start,
                                     std::string_view limit) = nullptr;
+
+    // If possible, replaces `*key` with a short key that sorts immediately
+    // after it, for index compaction.  May leave `*key` unchanged.
     void (*find_short_successor)(std::string *key) = nullptr;
 };
 
+// Returns a comparator that orders keys by their raw bytes.
 ANCHORDB_EXPORT const Comparator new_byte_wise_comparator();
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

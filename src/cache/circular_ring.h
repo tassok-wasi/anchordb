@@ -23,6 +23,8 @@
 
 namespace ANCHORDB_NAMESPACE {
 
+// Intrusive circular doubly-linked list of ClockProHandle nodes, with an index
+// map giving O(1) lookup, insert and remove by key.
 class CircularRing {
   public:
     CircularRing() = default;
@@ -54,8 +56,7 @@ class CircularRing {
 
     // Advances clock hand pointer by 1 step in O(1) time
     ClockProHandle *step(ClockProHandle *hand) const {
-        if (hand == nullptr)
-            return head_;
+        if (hand == nullptr) return head_;
         return hand->next;
     }
 
@@ -72,4 +73,4 @@ class CircularRing {
     void unlink_(ClockProHandle *node);
 };
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

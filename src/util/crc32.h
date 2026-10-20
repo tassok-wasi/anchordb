@@ -31,19 +31,27 @@ uint32_t extend(uint32_t crc, const char *data, size_t n);
 // Equivalent to calling extend(0, data, n).
 uint32_t value(const char *data, size_t n);
 
-// Delta value used by the CRC mask/unmask operations (as in LevelDB).
-static const uint32_t k_mask_delta = 0xa282ead8ul; // used by leveldb
+// Delta mixed into the CRC mask so that a masked CRC never contains a partial
+// frame delimiter.  AnchorDB-specific constant (not borrowed from any other
+// store's format).
+inline constexpr uint32_t k_mask_delta = 0x5f3759dfu;
+
+// Rotation amounts applied by mask()/unmask().  The CRC is rotated right by
+// k_mask_rot_r and recovered by rotating right by k_mask_rot_l; the two must
+// sum to 32 so the pair is an exact inverse.
+inline constexpr uint32_t k_mask_rot_r = 13;
+inline constexpr uint32_t k_mask_rot_l = 19;
 
 // Masks a raw CRC32 value so that it cannot contain a partial frame delimiter.
 // The masked value is suitable for storage or transmission.
 inline uint32_t mask(uint32_t crc) {
-    return ((crc >> 15) | (crc << 17)) + k_mask_delta;
+    return ((crc >> k_mask_rot_r) | (crc << k_mask_rot_l)) + k_mask_delta;
 }
 
 // Reverses the mask operation to recover the original CRC32 value.
 inline uint32_t unmask(uint32_t masked_crc) {
     uint32_t rot = masked_crc - k_mask_delta;
-    return ((rot >> 17) | (rot << 15));
+    return ((rot >> k_mask_rot_l) | (rot << k_mask_rot_r));
 }
 
 } // namespace ANCHORDB_NAMESPACE

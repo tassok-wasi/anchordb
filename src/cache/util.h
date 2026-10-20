@@ -25,6 +25,8 @@ namespace ANCHORDB_NAMESPACE {
 const int kNumShardBits = 4;
 const int kNumShards = 1 << kNumShardBits;
 
+// A key paired with its precomputed 64-bit hash, passed by value throughout the
+// cache maps and lists.
 struct HashedKey {
     std::string_view key;
     uint64_t hash;
@@ -97,7 +99,8 @@ struct ARCHandle {
     size_t charge;
     uint64_t hash;
 
-    // Optional helper state flag to track location directly on the handle
+    // Which ARC list the handle currently belongs to (T1/T2 resident, B1/B2
+    // ghost).
     enum class State : uint8_t { kT1, kT2, kB1, kB2 };
     State state{State::kT1};
 
@@ -107,4 +110,4 @@ struct ARCHandle {
     std::string_view key() const { return std::string_view(key_data, key_len); }
 };
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

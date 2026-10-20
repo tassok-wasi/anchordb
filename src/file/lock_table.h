@@ -12,11 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Out-of-line definitions for the abstract Env/IO base classes.  These
-// destructors are declared in the public env.h but were never defined, so any
-// program that installs a concrete Env (e.g. PosixEnv) fails to link without
-// them.  Defining them here also anchors each class's vtable.
-
 #pragma once
 
 #include "anchordb/anchordb_namespace.h"
@@ -41,6 +36,7 @@ inline int lock_or_unlock(int fd, bool lock) {
     return ::fcntl(fd, F_SETLK, &file_lock_info);
 }
 
+// A held POSIX advisory lock: the fd it was taken on and the locked file name.
 class PosixFileLock : public FileLock {
   public:
     PosixFileLock(int fd, std::string filename)

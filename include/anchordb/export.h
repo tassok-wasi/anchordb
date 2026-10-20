@@ -12,21 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Symbol visibility macro for the public API.  ANCHORDB_EXPORT expands to the
+// platform's export/import attribute for shared-library builds and to nothing
+// for static builds (when ANCHORDB_STATIC_DEFINE is set).  Every exported class
+// and free function in the public headers is annotated with it.
+
 #pragma once
 
 #if defined(ANCHORDB_STATIC_DEFINE)
-  #define ANCHORDB_EXPORT
-#else
-  #if defined(_WIN32) || defined(__CYGWIN__)
-    #if defined(anchordb_EXPORTS)
-      // Defined automatically by CMake when building the shared library
-      #define ANCHORDB_EXPORT __declspec(dllexport)
-    #else
-      #define ANCHORDB_EXPORT __declspec(dllimport)
-    #endif
-  #elif defined(__GNUC__) && ((__GNUC__ >= 4) || (__GNUC__ == 3 && __GNUC_MINOR__ >= 3))
-    #define ANCHORDB_EXPORT __attribute__((visibility("default")))
-  #else
     #define ANCHORDB_EXPORT
-  #endif
+#else
+    #if defined(_WIN32) || defined(__CYGWIN__)
+        #if defined(anchordb_EXPORTS)
+            // Defined automatically by CMake when building the shared library
+            #define ANCHORDB_EXPORT __declspec(dllexport)
+        #else
+            #define ANCHORDB_EXPORT __declspec(dllimport)
+        #endif
+    #elif defined(__GNUC__) &&                                                 \
+        ((__GNUC__ >= 4) || (__GNUC__ == 3 && __GNUC_MINOR__ >= 3))
+        #define ANCHORDB_EXPORT __attribute__((visibility("default")))
+    #else
+        #define ANCHORDB_EXPORT
+    #endif
 #endif

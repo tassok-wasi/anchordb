@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "env/posix.h"
 #include "anchordb/env.h"
 #include "anchordb/status.h"
 #include "env/env_default.h"
+#include "env/posix.h"
 #include "file/random_access_reader.h"
-#include "file/seqeuntial_reader.h"
+#include "file/sequential_reader.h"
 #include "file/writer.h"
 #include "util/posix_logger.h"
 
@@ -76,8 +76,11 @@ PosixEnv::PosixEnv(int max_open_files, uint32_t ring_entries, bool direct_io)
     // I/O paths fall back to synchronous pread/pwrite. Construction must not
     // throw; the outcome is reported through ring_status().
 #if HAS_IO_URING
-    int ret = io_uring_queue_init(ring_entries, &default_ring_, 0);
+    default_ring_ = new struct io_uring();
+    int ret = io_uring_queue_init(ring_entries, default_ring_, 0);
     if (ret < 0) {
+        delete default_ring_;
+        default_ring_ = nullptr;
         default_ring_valid_ = false;
         ring_status_ = Status::io_error(std::string_view("io_uring_queue_init"),
                                         std::strerror(-ret));
@@ -113,7 +116,11 @@ PosixEnv::~PosixEnv() {
 
 #if HAS_IO_URING
     // Destroy the shared default ring, but only if it was initialized.
-    if (default_ring_valid_) { io_uring_queue_exit(&default_ring_); }
+    if (default_ring_valid_ && default_ring_ != nullptr) {
+        io_uring_queue_exit(default_ring_);
+    }
+    delete default_ring_;
+    default_ring_ = nullptr;
 #endif
 }
 
@@ -129,7 +136,7 @@ struct io_uring *PosixEnv::get_thread_local_ring() {
 
     auto ring = std::make_unique<struct io_uring>();
     if (io_uring_queue_init(ring_entries_, ring.get(), 0) < 0) {
-        return default_ring_valid_ ? &default_ring_ : nullptr;
+        return default_ring_valid_ ? default_ring_ : nullptr;
     }
 
     struct io_uring *raw_ring = ring.get();
@@ -163,7 +170,7 @@ PosixEnv::new_random_access_file_reader(const std::string &filename,
                                         RandomAccessFileReader **result) {
     int fd = -1;
 
-    // Obtain the calling thread's dedicated lock-free io_uring ring.
+    // Calling thread's io_uring ring (nullptr when unavailable).
     struct io_uring *ring = get_thread_local_ring();
 
     if (fd_limiter_.acquire()) {
@@ -187,7 +194,7 @@ PosixEnv::new_random_access_file_reader(const std::string &filename,
 Status PosixEnv::new_writable_file_writer(const std::string &filename,
                                           WritableFileWriter **result,
                                           size_t buffer_size) {
-    // Obtain the calling thread's dedicated lock-free io_uring ring.
+    // Calling thread's io_uring ring (nullptr when unavailable).
     struct io_uring *ring = get_thread_local_ring();
 
     int flags = O_CREAT | O_WRONLY | O_TRUNC | kOpenBaseFlags;
@@ -207,7 +214,7 @@ Status PosixEnv::new_writable_file_writer(const std::string &filename,
 Status PosixEnv::new_appendable_file_writer(const std::string &filename,
                                             WritableFileWriter **result,
                                             size_t buffer_size) {
-    // Obtain the calling thread's dedicated lock-free io_uring ring.
+    // Calling thread's io_uring ring (nullptr when unavailable).
     struct io_uring *ring = get_thread_local_ring();
 
     // O_APPEND and O_DIRECT do not mix: on Linux an append-mode write ignores

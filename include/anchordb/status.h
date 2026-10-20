@@ -21,9 +21,15 @@
 #include "anchordb/anchordb_namespace.h"
 
 namespace ANCHORDB_NAMESPACE {
+// Lightweight status/error result returned by most operations.
+//
+// A Status is cheap to copy (the common success case shares a null state) and
+// is safe to hold across threads once constructed.  Use is_ok() to test for
+// success and the is_*() predicates to classify an error; to_str() returns a
+// printable description.
 class ANCHORDB_EXPORT Status {
   public:
-    // Create a success status.
+    // Creates a success status.
     Status() noexcept : state_(nullptr) {}
     ~Status() { delete[] state_; }
 
@@ -46,10 +52,13 @@ class ANCHORDB_EXPORT Status {
         return *this;
     }
 
-    // Return a success status.
+    // Returns a success status.
     static Status ok() { return Status(); }
 
-    // Return error status of an appropriate type.
+    // Factory functions returning an error status of a specific kind.  `msg`
+    // is the primary description; the optional `msg2` adds secondary context
+    // (e.g. a key or file name) and is omitted from the printed form when
+    // empty.
     static Status not_found(std::string_view msg,
                             std::string_view msg2 = std::string_view()) {
         return Status(Code::NotFound, msg, msg2);
@@ -71,7 +80,8 @@ class ANCHORDB_EXPORT Status {
         return Status(Code::IoError, msg, msg2);
     }
 
-    // Return error status of an appropriate type.
+    // Convenience overloads taking std::string, for callers that already hold
+    // owned strings and do not want a temporary std::string_view.
     static Status not_found(const std::string &msg,
                             const std::string &msg2 = "") {
         return Status(Code::NotFound, msg, msg2);
@@ -94,13 +104,13 @@ class ANCHORDB_EXPORT Status {
     // Returns true iff the status indicates an IOError.
     bool is_io_error() const { return code() == Code::IoError; }
 
-    // Returns true iff the status indicates a NotSupportedError.
-    bool is_not_supported_error() const { return code() == Code::NotSupported; }
+    // Returns true iff the status indicates a NotSupported error.
+    bool is_not_supported() const { return code() == Code::NotSupported; }
 
-    // Returns true iff the status indicates an InvalidArgument.
+    // Returns true iff the status indicates an InvalidArgument error.
     bool is_invalid_argument() const { return code() == Code::InvalidArgument; }
 
-    // Return a string representation of this status suitable for printing.
+    // Returns a string representation of this status suitable for printing.
     // Returns the string "OK" for success.
     std::string to_str() const;
 

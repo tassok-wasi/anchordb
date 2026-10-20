@@ -23,12 +23,9 @@
 
 namespace ANCHORDB_NAMESPACE {
 
-// Owns a concrete Cache implementation and exposes its operations through a
-// non-virtual facade.  Callers hold a CacheWrapper by value (or by a single
-// pointer) so that forwarding is inlinable and there is exactly one virtual
-// dispatch (inside the wrapped Cache) per call instead of an extra indirection
-// through a user-defined interface.  The wrapper also centralizes ownership so
-// the wrapped cache is destroyed with the wrapper.
+// Owning, non-virtual facade over a Cache: forwards each operation and deletes
+// the wrapped cache on destruction.  Holding it by value keeps forwarding
+// inlinable, leaving one virtual dispatch per call.
 class CacheWrapper {
   public:
     explicit CacheWrapper(Cache *cache) : cache_(cache) {}

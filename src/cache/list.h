@@ -22,6 +22,8 @@
 
 namespace ANCHORDB_NAMESPACE {
 
+// Intrusive doubly-linked list whose nodes are heap-allocated by the list,
+// with an index map for O(1) lookup, insert and remove by key.
 template <typename T> class List {
   public:
     List() = default;
@@ -41,9 +43,7 @@ template <typename T> class List {
 
     T get(HashedKey key) const {
         Node *node = index_map_.get(key);
-        if (node == nullptr) {
-            return T();
-        }
+        if (node == nullptr) { return T(); }
 
         return node->data;
     }
@@ -79,8 +79,7 @@ template <typename T> class List {
 
     void clear();
 
-    // Public so that SwissMap<Node *> can be explicitly instantiated in
-    // swiss_map.cc, where the map's template definitions live.
+    // Public so the index map can store pointers to nodes.
     struct Node {
         HashedKey hashed_key;
         T data;
@@ -156,8 +155,7 @@ template <typename T> List<T> &List<T>::operator=(List &&other) noexcept {
 }
 
 template <typename T> void List<T>::push_front(HashedKey key, T data) {
-    if (contains(key))
-        return;
+    if (contains(key)) return;
 
     Node *new_node = new Node(key, data);
     if (is_empty()) {
@@ -170,8 +168,7 @@ template <typename T> void List<T>::push_front(HashedKey key, T data) {
 }
 
 template <typename T> void List<T>::push_back(HashedKey key, T data) {
-    if (contains(key))
-        return;
+    if (contains(key)) return;
 
     Node *new_node = new Node(key, data);
     if (is_empty()) {
@@ -185,8 +182,7 @@ template <typename T> void List<T>::push_back(HashedKey key, T data) {
 
 template <typename T>
 void List<T>::insert_before(HashedKey tr_key, HashedKey new_key, T data) {
-    if (contains(new_key))
-        return;
+    if (contains(new_key)) return;
 
     Node *target_node = index_map_.get(tr_key);
     assert(target_node != nullptr);
@@ -200,8 +196,7 @@ void List<T>::insert_before(HashedKey tr_key, HashedKey new_key, T data) {
 
 template <typename T>
 void List<T>::insert_after(HashedKey tr_key, HashedKey new_key, T data) {
-    if (contains(new_key))
-        return;
+    if (contains(new_key)) return;
 
     Node *target_node = index_map_.get(tr_key);
     assert(target_node != nullptr);
@@ -217,8 +212,7 @@ template <typename T> void List<T>::move_to_front(HashedKey key) {
     Node *target_node = index_map_.get(key);
     assert(target_node != nullptr);
 
-    if (target_node == head_)
-        return;
+    if (target_node == head_) return;
 
     unlink_(target_node);
     link_before_(head_, target_node);
@@ -228,8 +222,7 @@ template <typename T> void List<T>::move_to_back(HashedKey key) {
     Node *target_node = index_map_.get(key);
     assert(target_node != nullptr);
 
-    if (target_node == tail_)
-        return;
+    if (target_node == tail_) return;
 
     unlink_(target_node);
     link_after_(tail_, target_node);
@@ -277,23 +270,13 @@ template <typename T> void List<T>::link_after_(Node *target, Node *node) {
 }
 
 template <typename T> void List<T>::unlink_(Node *node) {
-    if (node == nullptr) {
-        return;
-    }
-    if (node->prev != nullptr) {
-        node->prev->next = node->next;
-    }
-    if (node->next != nullptr) {
-        node->next->prev = node->prev;
-    }
-    if (node == head_) {
-        head_ = node->next;
-    }
-    if (node == tail_) {
-        tail_ = node->prev;
-    }
+    if (node == nullptr) { return; }
+    if (node->prev != nullptr) { node->prev->next = node->next; }
+    if (node->next != nullptr) { node->next->prev = node->prev; }
+    if (node == head_) { head_ = node->next; }
+    if (node == tail_) { tail_ = node->prev; }
     node->prev = nullptr;
     node->next = nullptr;
 }
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

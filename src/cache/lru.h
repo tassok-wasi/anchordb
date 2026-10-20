@@ -36,6 +36,9 @@
 
 namespace ANCHORDB_NAMESPACE {
 
+// LRU cache.  Entries currently held by a caller live on in_use_; released
+// entries move to the lru_ list, from which the least-recently-used are evicted
+// once usage exceeds capacity.
 class LRUCache {
   public:
     explicit LRUCache(size_t capacity = 0, MapType t = MapType::Swiss)
@@ -47,8 +50,7 @@ class LRUCache {
         case MapType::RobbinHood:
             map_.emplace<RobinHoodMap<LRUHandle *>>(capacity_);
             break;
-        case MapType::Swiss:
-            map_.emplace<SwissMap<LRUHandle *>>(capacity_);
+        case MapType::Swiss: map_.emplace<SwissMap<LRUHandle *>>(capacity_);
         }
     }
     ~LRUCache() { prune(); }
@@ -114,6 +116,8 @@ class LRUCache {
         map_;
 };
 
+// Shards an LRU cache across kNumShards independent sub-caches, picking the
+// shard from the top hash bits.
 class ShardedLRUCache : public Cache {
   public:
     explicit ShardedLRUCache(size_t capacity, MapType t) : last_id_(0) {
@@ -160,9 +164,7 @@ class ShardedLRUCache : public Cache {
     }
 
     void prune() override {
-        for (int s = 0; s < kNumShards; s++) {
-            shard_[s].prune();
-        }
+        for (int s = 0; s < kNumShards; s++) { shard_[s].prune(); }
     }
 
     size_t total_charge() const override {
@@ -188,4 +190,4 @@ class ShardedLRUCache : public Cache {
     }
 };
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

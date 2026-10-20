@@ -28,15 +28,16 @@
 namespace ANCHORDB_NAMESPACE {
 
 // Caches open Tables so repeated reads of the same table number avoid
-// re-opening files and re-parsing the summary.  The backing Cache is created
-// from src/cache/ according to Options::table_cache_type and
-// Options::table_cache_size, and owned through a CacheWrapper.
+// re-opening files and re-parsing the summary.  The backing Cache is chosen by
+// Options::table_cache_type/size and owned through a CacheWrapper.
 //
-// The cache value is a Table* holding one reference; the cache deleter unrefs
-// it.  Callers of find_table receive their own reference, which keeps the Table
-// alive for the duration of a read or an iterator's lifetime.  Cache keys are
-// namespaced by a per-TableCache id so multiple TableCaches can safely share
-// one Cache.
+// Captured Options are forwarded unchanged to Table::open, so cached tables use
+// the same compressor the writer used.  Only the parsed summary is charged to
+// the cache; index blocks are decompressed per load.
+//
+// The cache holds a Table* with one reference (the deleter unrefs it); callers
+// of find_table receive their own reference.  Keys are namespaced by a
+// per-TableCache id so multiple TableCaches can share one Cache.
 class TableCache {
   public:
     TableCache(const Options &options, std::string db_dir);

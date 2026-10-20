@@ -64,8 +64,7 @@ size_t encode_data_record(std::string *dst, uint64_t timestamp,
     dst->push_back(static_cast<char>(static_cast<uint8_t>(flag)));
     dst->append(value_bytes.data(), value_bytes.size());
 
-    // The CRC covers every byte after the CRC field, i.e. timestamp through
-    // value_bytes.
+    // CRC covers timestamp through value_bytes.
     const char *payload = dst->data() + start + kCrcCoveredOffset;
     const size_t payload_size = dst->size() - (start + kCrcCoveredOffset);
     const uint32_t crc = mask(value(payload, payload_size));
@@ -108,9 +107,8 @@ Status decode_data_record(std::string_view *input, ParsedDataRecord *result) {
     const uint32_t stored_crc =
         decode_fixed_32(record.data() + kCrcFieldOffset);
 
-    // Walk the payload.  The record length is not stored explicitly, so it is
-    // derived by parsing; every bound below is checked against the remaining
-    // bytes so a truncated or malicious record can never cause an over-read.
+    // The record length is implicit, so parse it field by field and check
+    // every bound against the remaining bytes.
     std::string_view cursor = record.substr(kCrcCoveredOffset);
 
     const uint64_t timestamp = decode_fixed_64(cursor.data());
@@ -155,8 +153,7 @@ Status decode_data_record(std::string_view *input, ParsedDataRecord *result) {
         cursor.substr(0, static_cast<size_t>(value_size));
     cursor.remove_prefix(static_cast<size_t>(value_size));
 
-    // The record ends here; verify the CRC over exactly this span (timestamp
-    // through value_bytes) before trusting any field.
+    // Verify the CRC over timestamp through value_bytes.
     const size_t record_size = record.size() - cursor.size();
     const std::string_view covered =
         record.substr(kCrcCoveredOffset, record_size - kCrcCoveredOffset);

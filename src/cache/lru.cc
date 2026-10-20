@@ -66,9 +66,7 @@ Cache::Handle *LRUCache::insert(std::string_view key, uint64_t hash,
             },
             map_);
         bool erased = finish_erase(old);
-        if (!erased) {
-            assert(erased);
-        }
+        if (!erased) { assert(erased); }
     }
 
     mutex_.unlock();
@@ -80,9 +78,7 @@ Cache::Handle *LRUCache::lookup(std::string_view key, uint64_t hash) {
     LRUHandle *e = std::visit(
         [&](auto &active_map) { return active_map.get(HashedKey{key, hash}); },
         map_);
-    if (e != nullptr) {
-        ref(e);
-    }
+    if (e != nullptr) { ref(e); }
     mutex_.unlock();
     return reinterpret_cast<Cache::Handle *>(e);
 }
@@ -115,8 +111,7 @@ void LRUCache::prune() {
             },
             map_);
         bool erased = finish_erase(e);
-        if (!erased)
-            assert(erased);
+        if (!erased) assert(erased);
     }
     mutex_.unlock();
 }
@@ -162,4 +157,4 @@ Cache *new_lru_cache(size_t capacity, MapType t) {
     return new ShardedLRUCache(capacity, t);
 }
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

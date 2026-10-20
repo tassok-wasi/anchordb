@@ -41,8 +41,7 @@ CircularRing &CircularRing::operator=(CircularRing &&other) noexcept {
 
 void CircularRing::push_back(HashedKey key, ClockProHandle *handle) {
     assert(handle != nullptr);
-    if (contains(key))
-        return;
+    if (contains(key)) return;
 
     if (is_empty()) {
         link_empty_(handle);
@@ -61,8 +60,7 @@ void CircularRing::insert_before(ClockProHandle *target,
     assert(target != nullptr);
     assert(handle != nullptr);
     HashedKey key{handle->key(), handle->hash};
-    if (contains(key))
-        return;
+    if (contains(key)) return;
 
     link_before_(target, handle);
     size_++;
@@ -74,8 +72,7 @@ void CircularRing::insert_after(ClockProHandle *target,
     assert(target != nullptr);
     assert(handle != nullptr);
     HashedKey key{handle->key(), handle->hash};
-    if (contains(key))
-        return;
+    if (contains(key)) return;
 
     link_after_(target, handle);
     size_++;
@@ -83,8 +80,7 @@ void CircularRing::insert_after(ClockProHandle *target,
 }
 
 void CircularRing::remove(ClockProHandle *handle) {
-    if (handle == nullptr)
-        return;
+    if (handle == nullptr) return;
     HashedKey key{handle->key(), handle->hash};
 
     unlink_(handle);
@@ -99,8 +95,7 @@ void CircularRing::remove(HashedKey key) {
 }
 
 void CircularRing::clear() {
-    if (head_ == nullptr)
-        return;
+    if (head_ == nullptr) return;
 
     ClockProHandle *curr = head_;
     for (size_t i = 0; i < size_; ++i) {
@@ -153,13 +148,11 @@ void CircularRing::unlink_(ClockProHandle *node) {
         node->prev->next = node->next;
         node->next->prev = node->prev;
 
-        if (node == head_) {
-            head_ = node->next;
-        }
+        if (node == head_) { head_ = node->next; }
     }
 
     node->prev = nullptr;
     node->next = nullptr;
 }
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

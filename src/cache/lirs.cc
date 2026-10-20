@@ -32,13 +32,9 @@ Cache::Handle *LIRSCache::insert(std::string_view key, uint64_t hash,
     if (e != nullptr) {
         if (e->is_resident) {
             // Overwrite existing resident node
-            if (e->deleter && e->value) {
-                (*e->deleter)(e->key(), e->value);
-            }
+            if (e->deleter && e->value) { (*e->deleter)(e->key(), e->value); }
             usage_ -= e->charge;
-            if (e->is_lir) {
-                lir_usage_ -= e->charge;
-            }
+            if (e->is_lir) { lir_usage_ -= e->charge; }
         }
 
         e->value = value;
@@ -46,18 +42,14 @@ Cache::Handle *LIRSCache::insert(std::string_view key, uint64_t hash,
         e->charge = charge;
         e->is_resident = true;
         usage_ += charge;
-        if (e->is_lir) {
-            lir_usage_ += charge;
-        }
+        if (e->is_lir) { lir_usage_ += charge; }
 
         // Access/Promotion logic
         if (e->is_lir) {
             bool was_bottom = (!stack_.is_empty() && stack_.back() == e);
             stack_.remove(HashedKey{e->key(), e->hash});
             stack_.push_front(HashedKey{e->key(), e->hash}, e);
-            if (was_bottom) {
-                prune_stack();
-            }
+            if (was_bottom) { prune_stack(); }
         } else { // HIR block
             if (e->in_stack) {
                 // Promoted to LIR
@@ -166,9 +158,7 @@ Cache::Handle *LIRSCache::lookup(std::string_view key, uint64_t hash) {
             bool was_bottom = (!stack_.is_empty() && stack_.back() == e);
             stack_.remove(HashedKey{e->key(), e->hash});
             stack_.push_front(HashedKey{e->key(), e->hash}, e);
-            if (was_bottom) {
-                prune_stack();
-            }
+            if (was_bottom) { prune_stack(); }
         } else { // HIR block hit
             if (e->in_stack) {
                 // Promote HIR block to LIR block
@@ -346,9 +336,7 @@ bool LIRSCache::finish_erase(LIRSHandle *e) {
         }
         if (e->is_resident) {
             usage_ -= e->charge;
-            if (e->is_lir) {
-                lir_usage_ -= e->charge;
-            }
+            if (e->is_lir) { lir_usage_ -= e->charge; }
         }
         e->in_cache = false;
         prune_stack();
@@ -361,4 +349,4 @@ Cache *new_lirs_cache(size_t capacity, MapType t) {
     return new ShardedLIRSCache(capacity, t);
 }
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

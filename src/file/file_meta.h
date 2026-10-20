@@ -12,10 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Out-of-line definitions for the abstract Env/IO base classes.  These
-// destructors are declared in the public env.h but were never defined, so any
-// program that installs a concrete Env (e.g. PosixEnv) fails to link without
-// them.  Defining them here also anchors each class's vtable.
+// Shared POSIX file constants (I/O buffer sizes, O_DIRECT alignment) and the
+// errno-to-Status helper used across the file layer.
 
 #pragma once
 

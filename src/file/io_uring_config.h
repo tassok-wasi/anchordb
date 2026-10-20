@@ -14,10 +14,9 @@
 
 #pragma once
 
-// Centralizes the io_uring availability switch. CMake defines HAS_IO_URING to
-// 0 or 1; default to 0 so translation units built outside the build system
-// still compile without liburing. When disabled, `struct io_uring` remains an
-// incomplete type and only pointers to it may be used.
+// io_uring availability switch.  CMake defines HAS_IO_URING to 0 or 1; the
+// fallback keeps translation units compiling without liburing, where
+// `struct io_uring` stays an incomplete type usable only through pointers.
 
 #ifndef HAS_IO_URING
     #define HAS_IO_URING 0

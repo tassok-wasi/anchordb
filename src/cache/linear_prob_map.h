@@ -25,6 +25,8 @@
 
 namespace ANCHORDB_NAMESPACE {
 
+// Open-addressing hash map using linear probing.  Deletion uses backward-shift
+// rather than tombstones, so probe sequences stay contiguous.
 template <typename T> class LinearProbingMap {
   public:
     explicit LinearProbingMap(size_t initial_capacity = 16)
@@ -81,8 +83,7 @@ template <typename T> class LinearProbingMap {
 };
 
 template <typename T> bool LinearProbingMap<T>::contains(HashedKey key) const {
-    if (size_ == 0)
-        return false;
+    if (size_ == 0) return false;
 
     size_t idx = mask_(key.hash);
 
@@ -98,9 +99,7 @@ template <typename T> bool LinearProbingMap<T>::contains(HashedKey key) const {
 }
 
 template <typename T> T LinearProbingMap<T>::get(HashedKey key) const {
-    if (size_ == 0) {
-        return T();
-    }
+    if (size_ == 0) { return T(); }
 
     size_t idx = mask_(key.hash);
 
@@ -116,9 +115,7 @@ template <typename T> T LinearProbingMap<T>::get(HashedKey key) const {
 }
 
 template <typename T> void LinearProbingMap<T>::insert(HashedKey key, T value) {
-    if (size_ >= capacity_ * kMaxLoadFactor) {
-        resize_(capacity_ * 2);
-    }
+    if (size_ >= capacity_ * kMaxLoadFactor) { resize_(capacity_ * 2); }
 
     size_t idx = mask_(key.hash);
 
@@ -138,8 +135,7 @@ template <typename T> void LinearProbingMap<T>::insert(HashedKey key, T value) {
 }
 
 template <typename T> T LinearProbingMap<T>::remove(HashedKey key) {
-    if (size_ == 0)
-        return T();
+    if (size_ == 0) return T();
 
     size_t idx = mask_(key.hash);
 
@@ -187,13 +183,11 @@ template <typename T> void LinearProbingMap<T>::resize_(size_t new_capacity) {
     for (const auto &bucket : old_buckets) {
         if (bucket.occupied) {
             size_t idx = mask_(bucket.hashed_key.hash);
-            while (buckets_[idx].occupied) {
-                idx = next_index_(idx);
-            }
+            while (buckets_[idx].occupied) { idx = next_index_(idx); }
             buckets_[idx] = bucket;
             size_++;
         }
     }
 }
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

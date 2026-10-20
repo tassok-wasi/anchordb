@@ -29,14 +29,14 @@ namespace ANCHORDB_NAMESPACE {
     +--------------------------------------------------------------------------------------------------------+
     | 64KB ALIGNED SEGMENT BOUNDARY                                                                          |
     +--------------------------------------------------------------------------------------------------------+
-    | [HEADER (4 Bytes)]                                                                                     |
-    |   - slot_count          (2 Bytes): Total elements in this block                                        |
-    |   - free_space_boundary (2 Bytes): Byte offset marking the boundary where backward payload begins      |
+    | [HEADER (8 Bytes)]                                                                                     |
+    |   - slot_count          (4 Bytes): Total elements in this block                                        |
+    |   - free_space_boundary (4 Bytes): Byte offset marking the boundary where backward payload begins      |
     +--------------------------------------------------------------------------------------------------------+
-    | [FORWARD FIXED-SIZE SLOTS ARRAY (Grows forward from byte offset 4)]                                    |
-    |   - Slot 0: [key_local_offset (2B) | value_type (1B) | value_flag (1B) | data_size (4B) | data_global_offset (8B)] |
-    |   - Slot 1: [key_local_offset (2B) | value_type (1B) | value_flag (1B) | data_size (4B) | data_global_offset (8B)] |
-    |   - Slot N: Totaling 16 bytes per slot. Fits exactly 4 slots per 64-byte CPU cache line.              |
+    | [FORWARD FIXED-SIZE SLOTS ARRAY (Grows forward from byte offset 8)]                                    |
+    |   - Slot 0: [key_local_offset (4B) | value_type (1B) | value_flag (1B) | data_size (4B) | data_global_offset (8B)] |
+    |   - Slot 1: [key_local_offset (4B) | value_type (1B) | value_flag (1B) | data_size (4B) | data_global_offset (8B)] |
+    |   - Slot N: Totaling 18 bytes per slot.                                                                |
     |                                                                                                        |
     |       Field Metadata Definitions:                                                                      |
     |         - value_type (1B): [0x1 = Value] | [0x0 = Tombstone]                                           |
@@ -45,41 +45,55 @@ namespace ANCHORDB_NAMESPACE {
     +--------------------------------------------------------------------------------------------------------+
     |                                  ... UNUSED BLOCK SPACE ...                                            |
     +--------------------------------------------------------------------------------------------------------+
-    | [BACKWARD VARIABLE-LENGTH STRINGS PAYLOAD (Grows backward from absolute end of 64KB block)]            |
-    |   - String N: [key_length (2B)] [key_bytes (Variable)] [timestamp (8B: uint64_t)]                      |
-    |   - String 0: Read sequentially using 2-byte key_local_offset pointers from forward slots.             |
+    | [BACKWARD VARIABLE-LENGTH STRINGS PAYLOAD (Grows backward from absolute end of the block)]             |
+    |   - String N: [key_length (4B)] [key_bytes (Variable)] [timestamp (8B: uint64_t)]                      |
+    |   - String 0: Read sequentially using 4-byte key_local_offset pointers from forward slots.             |
     +--------------------------------------------------------------------------------------------------------+
 */
 // clang-format on
 
 void IndexBlockWriter::write_header() noexcept {
-    encode_fixed_16(buffer_, slot_count_);
-    // 0 is the empty-block sentinel: an empty block's boundary is 65536, which
-    // does not fit in 16 bits, and no non-empty block can ever have a boundary
-    // of 0 (the forward slot array occupies the low bytes).
-    const uint16_t boundary =
-        (slot_count_ == 0) ? 0 : static_cast<uint16_t>(free_space_boundary_);
-    encode_fixed_16(buffer_ + sizeof(uint16_t), boundary);
+    encode_fixed_32(buffer_, slot_count_);
+    // The boundary is a block-local offset; 32 bits cover every configurable
+    // block size, so the real value is stored directly (empty blocks store
+    // block_size_).
+    encode_fixed_32(buffer_ + sizeof(uint32_t),
+                    static_cast<uint32_t>(free_space_boundary_));
+}
+
+bool IndexBlockWriter::set_block_size(size_t block_size) {
+    // Resizing would invalidate offsets already written, so it is safe only
+    // when the block is empty or already finished.
+    if (slot_count_ != 0 && !finished_) { return false; }
+
+    const size_t new_size = round_index_block_size(block_size);
+    if (new_size != block_size_) {
+        char *new_buffer = new char[new_size];
+        delete[] buffer_;
+        buffer_ = new_buffer;
+        block_size_ = new_size;
+    }
+    reset();
+    return true;
 }
 
 bool IndexBlockWriter::add(std::string_view key, ValueHandle handle,
                            uint64_t timestamp) {
     assert(!finished_);
 
-    // A key longer than 16 bits cannot be encoded by this format; an oversized
-    // entry can never fit in a segment and must be handled by the caller.
+    // The key length is encoded in 32 bits; an oversized entry can never fit a
+    // segment and must be handled by the caller.
     const size_t payload_size =
-        sizeof(uint16_t) + key.size() + sizeof(uint64_t);
-    if (finished_ || sealed_ || key.size() > UINT16_MAX ||
-        payload_size > static_cast<size_t>(kDefaultBlockSize)) {
+        sizeof(uint32_t) + key.size() + sizeof(uint64_t);
+    if (finished_ || sealed_ || key.size() > UINT32_MAX ||
+        payload_size > block_size_) {
         return false;
     }
 
     const size_t forward_end =
         kIndexHeaderSize + static_cast<size_t>(slot_count_) * kIndexSlotSize;
     const size_t required = kIndexSlotSize + payload_size;
-    const size_t available =
-        static_cast<size_t>(free_space_boundary_) - forward_end;
+    const size_t available = free_space_boundary_ - forward_end;
 
     // Not enough room for this entry: seal the block and let the caller start a
     // new one.  The rejected entry is not stored.
@@ -90,23 +104,21 @@ bool IndexBlockWriter::add(std::string_view key, ValueHandle handle,
     }
 
     // Payload grows down from the free-space boundary.
-    const int new_boundary =
-        free_space_boundary_ - static_cast<int>(payload_size);
+    const size_t new_boundary = free_space_boundary_ - payload_size;
     char *payload = buffer_ + new_boundary;
-    encode_fixed_16(payload, static_cast<uint16_t>(key.size()));
-    payload += sizeof(uint16_t);
+    encode_fixed_32(payload, static_cast<uint32_t>(key.size()));
+    payload += sizeof(uint32_t);
     std::memcpy(payload, key.data(), key.size());
     payload += key.size();
     encode_fixed_64(payload, timestamp);
     free_space_boundary_ = new_boundary;
-    last_entry_offset_ = new_boundary;
+    last_entry_offset_ = static_cast<int64_t>(new_boundary);
 
     // Fixed-size slot grows up from the header.
     char *slot = buffer_ + forward_end;
-    encode_fixed_16(slot + kSlotKeyOffsetOff,
-                    static_cast<uint16_t>(new_boundary)); // key offset
-    // Byte order matches the documented layout: value_type, value_flag,
-    // data_size, then data_global_offset.
+    encode_fixed_32(slot + kSlotKeyOffsetOff,
+                    static_cast<uint32_t>(new_boundary)); // key offset
+    // Field order matches the documented slot layout.
     slot[kSlotTypeOff] = static_cast<char>(static_cast<uint8_t>(handle.type));
     slot[kSlotFlagOff] = static_cast<char>(static_cast<uint8_t>(handle.flag));
     encode_fixed_32(slot + kSlotDataSizeOff, handle.data_size);

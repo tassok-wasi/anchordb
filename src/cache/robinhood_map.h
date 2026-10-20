@@ -14,15 +14,17 @@
 
 #pragma once
 
+#include "anchordb/anchordb_namespace.h"
 #include "util.h"
 #include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
-#include "anchordb/anchordb_namespace.h"
 
 namespace ANCHORDB_NAMESPACE {
 
+// Open-addressing hash map using Robin Hood probing (each slot tracks its
+// probe distance) with backward-shift deletion.
 template <typename T> class RobinHoodMap {
   public:
     explicit RobinHoodMap(size_t initial_capacity = 16)
@@ -36,9 +38,7 @@ template <typename T> class RobinHoodMap {
 
     // Inserts or updates an entry using its pre-computed hash.
     void insert(HashedKey key, T value) {
-        if (size_ >= capacity_ * kMaxLoadFactor) {
-            resize_(capacity_ * 2);
-        }
+        if (size_ >= capacity_ * kMaxLoadFactor) { resize_(capacity_ * 2); }
 
         insert_(Bucket{key, value, 0, true});
     }
@@ -92,8 +92,7 @@ template <typename T> class RobinHoodMap {
 };
 
 template <typename T> bool RobinHoodMap<T>::contains(HashedKey key) const {
-    if (size_ == 0)
-        return false;
+    if (size_ == 0) return false;
 
     size_t idx = mask_(key.hash);
     uint32_t current_dib = 0;
@@ -101,9 +100,7 @@ template <typename T> bool RobinHoodMap<T>::contains(HashedKey key) const {
     while (buckets_[idx].occupied) {
         // Early termination: If current DIB in probing sequence is greater
         // than the bucket's DIB, the key cannot exist in the map.
-        if (current_dib > buckets_[idx].dib) {
-            return false;
-        }
+        if (current_dib > buckets_[idx].dib) { return false; }
 
         if (buckets_[idx].hashed_key.hash == key.hash &&
             buckets_[idx].hashed_key.key == key.key) {
@@ -118,8 +115,7 @@ template <typename T> bool RobinHoodMap<T>::contains(HashedKey key) const {
 }
 
 template <typename T> T RobinHoodMap<T>::get(HashedKey key) const {
-    if (size_ == 0)
-        return T();
+    if (size_ == 0) return T();
 
     size_t idx = mask_(key.hash);
     uint32_t current_dib = 0;
@@ -127,9 +123,7 @@ template <typename T> T RobinHoodMap<T>::get(HashedKey key) const {
     while (buckets_[idx].occupied) {
         // Early termination: If current DIB in probing sequence is greater
         // than the bucket's DIB, the key cannot exist in the map.
-        if (current_dib > buckets_[idx].dib) {
-            return T();
-        }
+        if (current_dib > buckets_[idx].dib) { return T(); }
 
         if (buckets_[idx].hashed_key.hash == key.hash &&
             buckets_[idx].hashed_key.key == key.key) {
@@ -161,8 +155,7 @@ template <typename T> void RobinHoodMap<T>::insert_(Bucket incoming) {
             return;
         }
 
-        // Robin Hood Eviction ("Steal from the rich, give to the
-        // poor")
+        // Steal the slot if we have probed farther than its occupant.
         if (incoming.dib > buckets_[idx].dib) {
             std::swap(incoming, buckets_[idx]);
         }
@@ -174,8 +167,7 @@ template <typename T> void RobinHoodMap<T>::insert_(Bucket incoming) {
 }
 
 template <typename T> T RobinHoodMap<T>::remove(HashedKey key) {
-    if (size_ == 0)
-        return T();
+    if (size_ == 0) return T();
 
     size_t idx = mask_(key.hash);
     uint32_t current_dib = 0;
@@ -203,9 +195,7 @@ template <typename T> T RobinHoodMap<T>::remove(HashedKey key) {
 }
 
 template <typename T> void RobinHoodMap<T>::shift_back_(size_t delete_idx) {
-    if (delete_idx >= buckets_.size()) {
-        return;
-    }
+    if (delete_idx >= buckets_.size()) { return; }
 
     size_t curr = delete_idx;
     size_t next = next_index_(curr);
@@ -235,4 +225,4 @@ template <typename T> void RobinHoodMap<T>::resize_(size_t new_capacity) {
     }
 }
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

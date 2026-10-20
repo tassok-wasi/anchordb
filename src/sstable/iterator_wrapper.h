@@ -23,6 +23,9 @@
 
 namespace ANCHORDB_NAMESPACE {
 
+// Owns an Iterator and caches the current key and validity, so hot loops can
+// test valid()/key() without a virtual call.  The cache is refreshed after
+// every reposition (set, next, prev, seek*).
 class IteratorWrapper {
   public:
     IteratorWrapper() : iter_(nullptr), valid_(false) {}
@@ -30,6 +33,8 @@ class IteratorWrapper {
     ~IteratorWrapper() { delete iter_; }
     Iterator *iter() const { return iter_; }
 
+    // Takes ownership of `iter`, deleting any previous one, and refreshes the
+    // cached state.  A null iterator leaves the wrapper invalid.
     void set(Iterator *iter) {
         delete iter_;
         iter_ = iter;
@@ -88,11 +93,10 @@ class IteratorWrapper {
     }
 
   private:
+    // Refresh the cached validity and key after the underlying iterator moved.
     void update() {
         valid_ = iter_->valid();
-        if (valid_) {
-            key_ = iter_->key();
-        }
+        if (valid_) { key_ = iter_->key(); }
     }
 
     Iterator *iter_;
@@ -100,4 +104,4 @@ class IteratorWrapper {
     std::string_view key_;
 };
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

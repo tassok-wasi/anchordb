@@ -23,8 +23,7 @@
 
 namespace ANCHORDB_NAMESPACE {
 
-// An Iterator implementation that is always invalid.
-// Used to represent empty result sets or to carry an error Status.
+// An always-invalid Iterator, used for empty result sets or to carry an error.
 class EmptyIterator : public Iterator {
   public:
     EmptyIterator() = default;
@@ -38,7 +37,6 @@ class EmptyIterator : public Iterator {
         return *this;
     }
 
-    // An empty iterator is never valid.
     bool valid() const override { return false; }
     void seek(std::string_view target) override {}
     void seek_to_first() override {}

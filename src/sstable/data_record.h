@@ -24,10 +24,8 @@
 
 namespace ANCHORDB_NAMESPACE {
 
-// Unified self-describing record format shared by data.bin and the WiscKey
-// value log (vLog).  Both files use the exact same layout so that crash
-// recovery, integrity verification and vLog garbage collection can share one
-// encoder/decoder.
+// Self-describing record format shared by data.bin and the WiscKey value log
+// (vLog), so recovery, integrity checks and vLog GC share one codec.
 //
 // clang-format off
 /*
@@ -82,12 +80,11 @@ struct ParsedDataRecord {
 // record with the given key and value sizes.  Useful for pre-reserving output.
 size_t data_record_encoded_len(size_t key_size, size_t value_size);
 
-// Appends one record to *dst and returns the number of bytes appended.
+// Appends one record to *dst and returns the number of bytes appended.  The
+// CRC is computed and patched in after the payload is written.
 //
-// `value` is opaque payload bytes: the raw value when flag == inline_, or an
-// already-encoded BlobHandle when flag == blob (the convenience overload below
-// handles that case).  The CRC is computed and patched in after the payload is
-// written, so callers never have to compute it themselves.
+// `value_bytes` is the raw value when flag == inline_, or an already-encoded
+// BlobHandle when flag == blob.
 size_t encode_data_record(std::string *dst, uint64_t timestamp,
                           std::string_view key, std::string_view value_bytes,
                           ValueType type, ValueFlag flag);
@@ -98,30 +95,17 @@ size_t encode_data_record(std::string *dst, uint64_t timestamp,
                           std::string_view key, const BlobHandle &handle,
                           ValueType type = ValueType::value);
 
-// Decodes one record from the front of *input and advances *input past it.
-//
-// On success fills *result and returns Status::ok(); on failure *input is left
-// unchanged and a corruption Status is returned (invalid_argument if a pointer
-// argument is null).  All lengths and the trailing metadata are validated
-// against the remaining bytes, the magic number is checked, and the masked
-// CRC32 is verified before *result is populated.
+// Decodes one record from the front of *input and advances *input past it.  On
+// success fills *result; on failure *input is left unchanged.  Magic, all
+// lengths and the CRC are validated before *result is populated.
 Status decode_data_record(std::string_view *input, ParsedDataRecord *result);
 
 // Convenience overload that decodes from a fixed view without a cursor.
 Status decode_data_record(std::string_view input, ParsedDataRecord *result);
 
-// Determines the total encoded size (in bytes) of the record at the front of
-// `input`, so a caller that does not yet hold the whole record can size a
-// read.  Only the fixed header and the two length varints must be reachable;
-// the key/value payload bytes need not be present.
-//
-// On success sets *total_size and *complete = true.  When `input` does not yet
-// contain enough bytes to reach the value_size varint, sets *complete = false
-// and *total_size to the minimum number of bytes (from the record's first byte)
-// the caller should supply before retrying; returns Status::ok().  Returns
-// Status::corruption if the fixed header is present but malformed, or if a
-// length field is implausibly large.  Returns Status::invalid_argument if an
-// output pointer is null.
+// Computes the total encoded size of the record at the front of `input` without
+// requiring the key/value payload to be present.  Sets *complete = false (with
+// *total_size as a minimum retry length) while too few bytes are available.
 Status data_record_size(std::string_view input, size_t *total_size,
                         bool *complete);
 

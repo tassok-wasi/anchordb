@@ -14,26 +14,43 @@
 
 #pragma once
 
+#include "anchordb/anchordb_namespace.h"
 #include "anchordb/export.h"
 #include <cstddef>
 #include <string>
-#include "anchordb/anchordb_namespace.h"
 
 namespace ANCHORDB_NAMESPACE {
 
+// Identifies a compression algorithm.  The codec must be available at build
+// time; if the corresponding library was not found, new_compressor() returns a
+// disabled (pass-through) Compressor for it.
 enum class ANCHORDB_EXPORT CompressionType {
-    None = 0x0,
-    Snappy = 0x1,
-    Zstd = 0x2,
-    Lz4 = 0x3,
-    Zlib = 0x4,
+    None = 0x0,   // no compression; blocks are stored verbatim
+    Snappy = 0x1, // fast, moderate ratio
+    Zstd = 0x2,   // tunable level, high ratio
+    Lz4 = 0x3,    // very fast, lower ratio
+    Zlib = 0x4,   // deflate
 };
 
+// Codec interface, expressed as plain function pointers so a custom codec needs
+// no inheritance.  A null function pointer means the codec is disabled and
+// blocks are stored uncompressed.
 struct ANCHORDB_EXPORT Compressor {
+    // Compresses `length` bytes at `input` into an existing `*output` string,
+    // using `level` as the codec-specific compression level.  Returns false on
+    // failure.
     bool (*compress)(const char *input, size_t length, std::string *output,
                      int level) = nullptr;
+
+    // Decompresses `length` bytes at `input` into `output`, which must be large
+    // enough for the full uncompressed payload (see get_uncompressed_length).
+    // Returns false on failure.
     bool (*uncompress)(const char *input, size_t length,
                        char *output) = nullptr;
+
+    // Reports the uncompressed size of the compressed block at `input`, so the
+    // caller can size the destination buffer for uncompress().  Returns false
+    // if the input is not a valid compressed block.
     bool (*get_uncompressed_length)(const char *input, size_t length,
                                     size_t *result) = nullptr;
 };
@@ -43,9 +60,9 @@ Compressor ANCHORDB_EXPORT new_zstd_compressor();
 Compressor ANCHORDB_EXPORT new_lz4_compressor();
 Compressor ANCHORDB_EXPORT new_zlib_compressor();
 
-// Returns the built-in compressor for `type`. Returns a Compressor with null
-// function pointers if `type` has no implementation (e.g.
-// CompressionType::None).
+// Returns the built-in compressor for `type`, or a disabled Compressor (null
+// function pointers) when `type` has no implementation (e.g.
+// CompressionType::None or a codec that was not built).
 Compressor ANCHORDB_EXPORT new_compressor(CompressionType type);
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

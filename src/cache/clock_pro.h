@@ -36,13 +36,15 @@
 
 namespace ANCHORDB_NAMESPACE {
 
+// CLOCK-Pro cache.  A single circular ring holds resident and non-resident
+// entries, classified hot/cold; three hands (cold, hot, test) advance it to
+// promote, demote and evict.
 class ClockProCache {
   public:
     explicit ClockProCache(size_t capacity = 0, MapType t = MapType::Swiss)
         : capacity_(capacity), usage_(0), hot_usage_(0) {
 
-        // Target cold capacity defaults to 100% capacity initially, dynamically
-        // adjusts
+        // Cold capacity starts at full capacity and adapts at runtime.
         cold_capacity_ = capacity_;
 
         switch (t) {
@@ -153,6 +155,8 @@ class ClockProCache {
         map_;
 };
 
+// Shards a CLOCK-Pro cache across kNumShards independent sub-caches, picking
+// the shard from the top hash bits.
 class ShardedClockProCache : public Cache {
   public:
     explicit ShardedClockProCache(size_t capacity, MapType t) : last_id_(0) {
@@ -199,9 +203,7 @@ class ShardedClockProCache : public Cache {
     }
 
     void prune() override {
-        for (int s = 0; s < kNumShards; s++) {
-            shard_[s].prune();
-        }
+        for (int s = 0; s < kNumShards; s++) { shard_[s].prune(); }
     }
 
     size_t total_charge() const override {
@@ -227,4 +229,4 @@ class ShardedClockProCache : public Cache {
     }
 };
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

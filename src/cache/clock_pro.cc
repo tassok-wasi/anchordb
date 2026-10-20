@@ -31,13 +31,9 @@ Cache::Handle *ClockProCache::insert(std::string_view key, uint64_t hash,
     if (e != nullptr) {
         if (e->is_resident) {
             // Overwrite existing resident entry payload
-            if (e->deleter && e->value) {
-                (*e->deleter)(e->key(), e->value);
-            }
+            if (e->deleter && e->value) { (*e->deleter)(e->key(), e->value); }
             usage_ -= e->charge;
-            if (e->is_hot) {
-                hot_usage_ -= e->charge;
-            }
+            if (e->is_hot) { hot_usage_ -= e->charge; }
         } else {
             // Non-resident history hit -> Promote to HOT entry
             if (cold_capacity_ > e->charge) {
@@ -55,9 +51,7 @@ Cache::Handle *ClockProCache::insert(std::string_view key, uint64_t hash,
         e->ref_bit = true;
         usage_ += charge;
 
-        if (e->is_hot) {
-            hot_usage_ += charge;
-        }
+        if (e->is_hot) { hot_usage_ += charge; }
 
         ref(e);
         evict();
@@ -144,14 +138,11 @@ void ClockProCache::prune() {
 }
 
 void ClockProCache::evict() {
-    while (usage_ > capacity_ && !ring_.is_empty()) {
-        hand_cold_step();
-    }
+    while (usage_ > capacity_ && !ring_.is_empty()) { hand_cold_step(); }
 }
 
 void ClockProCache::hand_cold_step() {
-    if (ring_.is_empty())
-        return;
+    if (ring_.is_empty()) return;
 
     ClockProHandle *e = hand_cold_;
     if (e == nullptr) {
@@ -192,8 +183,7 @@ void ClockProCache::hand_cold_step() {
 }
 
 void ClockProCache::hand_hot_step() {
-    if (ring_.is_empty())
-        return;
+    if (ring_.is_empty()) return;
 
     ClockProHandle *e = hand_hot_;
     if (e == nullptr) {
@@ -215,8 +205,7 @@ void ClockProCache::hand_hot_step() {
 }
 
 void ClockProCache::hand_test_step() {
-    if (ring_.is_empty())
-        return;
+    if (ring_.is_empty()) return;
 
     ClockProHandle *e = hand_test_;
     if (e == nullptr) {
@@ -245,15 +234,9 @@ void ClockProCache::ring_remove(ClockProHandle *e) {
     if (next == e) {
         next = nullptr; // e was the only node in the ring
     }
-    if (hand_cold_ == e) {
-        hand_cold_ = next;
-    }
-    if (hand_hot_ == e) {
-        hand_hot_ = next;
-    }
-    if (hand_test_ == e) {
-        hand_test_ = next;
-    }
+    if (hand_cold_ == e) { hand_cold_ = next; }
+    if (hand_hot_ == e) { hand_hot_ = next; }
+    if (hand_test_ == e) { hand_test_ = next; }
 
     ring_.remove(e);
 }
@@ -276,9 +259,7 @@ bool ClockProCache::finish_erase(ClockProHandle *e) {
     if (e != nullptr) {
         if (e->is_resident) {
             usage_ -= e->charge;
-            if (e->is_hot) {
-                hot_usage_ -= e->charge;
-            }
+            if (e->is_hot) { hot_usage_ -= e->charge; }
         }
         ring_remove(e);
         e->in_cache = false;
@@ -291,4 +272,4 @@ Cache *new_clock_pro_cache(size_t capacity, MapType t) {
     return new ShardedClockProCache(capacity, t);
 }
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

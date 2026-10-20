@@ -24,6 +24,9 @@
 
 namespace ANCHORDB_NAMESPACE {
 
+// Swiss-table hash map: open addressing that probes in groups of kGroupWidth
+// control bytes, each storing a 7-bit key fingerprint.  Group comparison is
+// SIMD-accelerated with a scalar fallback.
 template <typename T> class SwissMap {
   public:
     explicit SwissMap(size_t initial_capacity = 16)
@@ -89,15 +92,13 @@ template <typename T> class SwissMap {
 
     static size_t round_upto_power_of_two_(size_t val) {
         size_t cap = 16;
-        while (cap < val)
-            cap <<= 1;
+        while (cap < val) cap <<= 1;
         return cap;
     }
 
     // Compares the group of kGroupWidth control bytes starting at `group`
     // against the 7-bit fingerprint `h2`.  Returns a bitmask whose set bits
     // index lanes equal to h2, and sets `has_empty` if any lane is CTRL_EMPTY.
-    // Implemented with SIMD in swiss_map.cc.
     static uint32_t match_group_(const int8_t *group, int8_t h2,
                                  bool &has_empty);
 
@@ -105,8 +106,7 @@ template <typename T> class SwissMap {
     // it falls in the first group so wrap-around SIMD loads stay consistent.
     void set_control_(size_t idx, int8_t value) {
         controls_[idx] = value;
-        if (idx < kGroupWidth)
-            controls_[capacity_ + idx] = value;
+        if (idx < kGroupWidth) controls_[capacity_ + idx] = value;
     }
 
     void resize_(size_t new_capacity);
@@ -178,18 +178,15 @@ uint32_t SwissMap<T>::match_group_(const int8_t *group, int8_t h2,
     has_empty = false;
     for (size_t i = 0; i < kGroupWidth; ++i) {
         const int8_t ctrl = group[i];
-        if (ctrl == h2)
-            match_mask |= (1u << i);
-        if (ctrl == kCtrlEmpty)
-            has_empty = true;
+        if (ctrl == h2) match_mask |= (1u << i);
+        if (ctrl == kCtrlEmpty) has_empty = true;
     }
     return match_mask;
 #endif
 }
 
 template <typename T> bool SwissMap<T>::contains(HashedKey key) const {
-    if (size_ == 0)
-        return false;
+    if (size_ == 0) return false;
 
     size_t idx = mask_(key.hash);
     const int8_t h2 = extract_h2_(key.hash); // 7-bit fingerprint
@@ -213,8 +210,7 @@ template <typename T> bool SwissMap<T>::contains(HashedKey key) const {
         }
 
         // Hit an empty bucket -> key cannot exist.
-        if (has_empty)
-            return false;
+        if (has_empty) return false;
 
         // Advance probe sequence by one group.
         idx = (idx + kGroupWidth) & (capacity_ - 1);
@@ -222,8 +218,7 @@ template <typename T> bool SwissMap<T>::contains(HashedKey key) const {
 }
 
 template <typename T> T SwissMap<T>::get(HashedKey key) const {
-    if (size_ == 0)
-        return T();
+    if (size_ == 0) return T();
 
     size_t idx = mask_(key.hash);
     const int8_t h2 = extract_h2_(key.hash); // 7-bit fingerprint
@@ -247,8 +242,7 @@ template <typename T> T SwissMap<T>::get(HashedKey key) const {
         }
 
         // Hit an empty bucket -> key cannot exist.
-        if (has_empty)
-            return T();
+        if (has_empty) return T();
 
         // Advance probe sequence by one group.
         idx = (idx + kGroupWidth) & (capacity_ - 1);
@@ -310,14 +304,12 @@ template <typename T> void SwissMap<T>::insert(HashedKey key, T value) {
         }
 
         // Reached the end of the probe sequence without finding the key.
-        if (has_empty)
-            break;
+        if (has_empty) break;
 
         idx = (idx + kGroupWidth) & (capacity_ - 1);
     }
 
-    if (insert_idx_is_deleted)
-        --num_deleted_;
+    if (insert_idx_is_deleted) --num_deleted_;
 
     set_control_(insert_idx, h2);
     slots_[insert_idx] = Slot{key, value};
@@ -325,8 +317,7 @@ template <typename T> void SwissMap<T>::insert(HashedKey key, T value) {
 }
 
 template <typename T> T SwissMap<T>::remove(HashedKey key) {
-    if (size_ == 0)
-        return T();
+    if (size_ == 0) return T();
 
     size_t idx = mask_(key.hash);
     const int8_t h2 = extract_h2_(key.hash);
@@ -355,8 +346,7 @@ template <typename T> T SwissMap<T>::remove(HashedKey key) {
             match_bitmask &= (match_bitmask - 1);
         }
 
-        if (has_empty)
-            return T();
+        if (has_empty) return T();
 
         idx = (idx + kGroupWidth) & (capacity_ - 1);
     }
@@ -379,4 +369,4 @@ template <typename T> void SwissMap<T>::resize_(size_t new_capacity) {
     }
 }
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

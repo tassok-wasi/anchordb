@@ -20,4 +20,4 @@ namespace ANCHORDB_NAMESPACE {
 
 Cache::~Cache() = default;
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

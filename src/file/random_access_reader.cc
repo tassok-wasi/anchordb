@@ -12,15 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Out-of-line definitions for the abstract Env/IO base classes.  These
-// destructors are declared in the public env.h but were never defined, so any
-// program that installs a concrete Env (e.g. PosixEnv) fails to link without
-// them.  Defining them here also anchors each class's vtable.
-
-#include "random_access_reader.h"
 #include "anchordb/anchordb_namespace.h"
 #include "file_meta.h"
-#include "io_uring_config.h"
+#include "io_uring_config.h" // IWYU pragma: keep
+#include "random_access_reader.h"
 #include "sync_io.h"
 #include "util/aligned_buffer.h"
 #include <fcntl.h>
@@ -43,13 +38,10 @@ Status PosixRandomAccessFileReader::submit_read_(int fd, void *buf, size_t n,
     size_t total_read = 0;
     int sqe_count = 0;
 
-    // Submit all read SQEs in batches bounded by ring capacity.
-    // Each batch is submitted and reaped before the next batch is queued,
-    // so we never have unowned CQEs floating in a shared ring.
+    // Submit reads in batches bounded by ring capacity, reaping each batch
+    // before queuing the next so no CQEs are left unowned.
     while (total_read < n) {
-        // Determine how many SQEs we can queue in this batch.
-        // io_uring_sq_space_left() returns the number of free SQE slots;
-        // cap it to the remaining bytes we need to read.
+        // Free SQE slots available for this batch.
         unsigned sq_space = io_uring_sq_space_left(ring_);
         if (sq_space == 0) { return posix_error(filename_, EBUSY); }
 
@@ -60,8 +52,7 @@ Status PosixRandomAccessFileReader::submit_read_(int fd, void *buf, size_t n,
                batch_count < static_cast<int>(sq_space)) {
             struct io_uring_sqe *sqe = io_uring_get_sqe(ring_);
             if (!sqe) {
-                // Should not happen since we checked sq_space_left, but be
-                // safe.
+                // Guarded by sq_space, but stay safe.
                 break;
             }
 
@@ -149,8 +140,7 @@ Status PosixRandomAccessFileReader::read(uint64_t offset, size_t n,
     size_t read_bytes = n;
     char *target_buf = scratch;
 
-    // Declared at function scope so the bounce buffer outlives the
-    // submit_read_ call below.
+    // Function scope so the bounce buffer outlives submit_read_().
     AlignedBuffer aligned_buf;
 
     if (direct_io_) {
@@ -181,8 +171,7 @@ Status PosixRandomAccessFileReader::read(uint64_t offset, size_t n,
     size_t bytes_read = 0;
     Status status;
     if (ring_ == nullptr) {
-        // io_uring unavailable: random reads must not disturb a shared file
-        // offset, so pread(2) is both correct and thread-safe.
+        // No io_uring: pread(2) is positional and thread-safe.
         status =
             file_internal::sync_pread(filename_, target_fd, target_buf,
                                       read_bytes, read_offset, &bytes_read);

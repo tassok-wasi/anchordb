@@ -12,24 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Out-of-line definitions for the abstract Env/IO base classes.  These
-// destructors are declared in the public env.h but were never defined, so any
-// program that installs a concrete Env (e.g. PosixEnv) fails to link without
-// them.  Defining them here also anchors each class's vtable.
-
 #pragma once
 
 #include "anchordb/anchordb_namespace.h"
 #include "anchordb/env.h"
 #include "anchordb/status.h"
-#include "io_uring_config.h"
+#include "io_uring_config.h" // IWYU pragma: keep
 #include "limiter.h"
 #include <cstdint>
 #include <unistd.h>
 
 namespace ANCHORDB_NAMESPACE {
 
-// Random read via io_uring. Supports permanent or borrowed fd.
+// Random-access reader backed by io_uring, falling back to pread(2).  Uses a
+// permanent fd (owned and released to the limiter on destruction) when fd >= 0,
+// otherwise opens the file per read.
 class PosixRandomAccessFileReader final : public RandomAccessFileReader {
   public:
     PosixRandomAccessFileReader(std::string filename, int fd, Limiter *limiter,

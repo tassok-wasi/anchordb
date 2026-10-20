@@ -39,20 +39,24 @@ struct IndexBlockEntry {
     uint64_t timestamp;
 };
 
-// Parses an index block segment produced by IndexBlockWriter and exposes its
-// entries.  All returned std::string_views point into the block buffer, which
-// must outlive this reader.
+// Parses an index block segment produced by IndexBlockWriter.  All returned
+// views point into the block buffer, which must outlive this reader.
 //
-// The block is validated on construction; valid() is false if it is truncated
-// or otherwise malformed.
+// `block_size` is aligned the same way the writer aligns it (see
+// round_index_block_size); only the first `block_size` bytes are parsed.
+// valid() is false if the block is truncated or otherwise malformed.
 class IndexBlockReader {
   public:
-    explicit IndexBlockReader(std::string_view block);
+    explicit IndexBlockReader(std::string_view block,
+                              size_t block_size = kDefaultBlockSize);
 
     IndexBlockReader(const IndexBlockReader &) = delete;
     IndexBlockReader &operator=(const IndexBlockReader &) = delete;
 
     bool valid() const { return valid_; }
+
+    // Configured (and aligned) segment size this block was read with.
+    size_t block_size() const { return block_size_; }
 
     // Number of entries (slots) in the block.
     size_t size() const { return slot_count_; }
@@ -66,11 +70,10 @@ class IndexBlockReader {
     uint64_t timestamp(size_t index) const { return entry(index).timestamp; }
 
     // Returns a heap-allocated iterator over the entries in ascending key
-    // order: key() is the entry key and value() is a kIndexValueSize-byte
-    // record (see decode_value).  The caller owns the returned iterator and
-    // must keep this reader (and its block buffer) alive for its lifetime.
-    // A malformed block yields an error iterator; an empty block yields an
-    // empty iterator.
+    // order: key() is the entry key, value() is a kIndexValueSize-byte record
+    // (see decode_value).  The caller owns it and must keep this reader (and
+    // its block buffer) alive.  A malformed block yields an error iterator; an
+    // empty block yields an empty iterator.
     Iterator *new_iterator(Comparator comparator = Comparator{}) const;
 
     // Decodes a value() view produced by the iterator into a handle/timestamp.
@@ -81,7 +84,8 @@ class IndexBlockReader {
   private:
     const char *data_;
     size_t size_;
-    uint16_t slot_count_;
+    size_t block_size_;
+    uint32_t slot_count_;
     bool valid_;
 };
 

@@ -29,35 +29,50 @@ int ByteWiseCompare(std::string_view a, std::string_view b) {
     return a.compare(b);
 }
 
+// Fallback used when the caller supplies no comparator.
 const Comparator kByteWiseComparator{&ByteWiseCompare, nullptr, nullptr,
                                      nullptr};
 } // namespace
 
-IndexBlockReader::IndexBlockReader(std::string_view block)
-    : data_(block.data()), size_(block.size()), slot_count_(0), valid_(false) {
-    if (size_ < kIndexHeaderSize) { return; }
+IndexBlockReader::IndexBlockReader(std::string_view block, size_t block_size)
+    : data_(block.data()), size_(block.size()),
+      block_size_(round_index_block_size(block_size)), slot_count_(0),
+      valid_(false) {
+    // A block is always exactly one configured (aligned) segment.  Only the
+    // first block_size_ bytes are parsed; extra trailing bytes are ignored.
+    if (size_ < kIndexHeaderSize || size_ < block_size_) { return; }
 
-    slot_count_ = decode_fixed_16(data_);
+    slot_count_ = decode_fixed_32(data_);
+    const uint32_t free_space_boundary =
+        decode_fixed_32(data_ + sizeof(uint32_t));
+
     const size_t slots_end =
         kIndexHeaderSize + static_cast<size_t>(slot_count_) * kIndexSlotSize;
-    if (slots_end > size_) { return; }
+    if (slots_end > block_size_ || free_space_boundary > block_size_) {
+        return;
+    }
+
+    // The backward payload must start at or after the forward slot array once
+    // at least one entry has been stored.
+    if (slot_count_ != 0 && free_space_boundary < slots_end) { return; }
 
     // Validate every entry so callers can decode without bounds checks.
     for (size_t i = 0; i < slot_count_; ++i) {
         const char *slot = data_ + kIndexHeaderSize + i * kIndexSlotSize;
-        const uint16_t key_off = decode_fixed_16(slot);
+        const uint32_t key_off = decode_fixed_32(slot);
 
-        // The payload must live after the forward slot array and must hold at
-        // least its 2-byte length prefix.
-        if (key_off < slots_end ||
-            static_cast<size_t>(key_off) + sizeof(uint16_t) > size_) {
+        // Payloads grow down from the free-space boundary, so every payload
+        // starts at or above it; it must hold at least its 4-byte length
+        // prefix and stay inside the segment.
+        if (key_off < free_space_boundary ||
+            static_cast<size_t>(key_off) + sizeof(uint32_t) > block_size_) {
             return;
         }
 
-        const uint16_t key_len = decode_fixed_16(data_ + key_off);
+        const uint32_t key_len = decode_fixed_32(data_ + key_off);
         const size_t key_start =
-            static_cast<size_t>(key_off) + sizeof(uint16_t);
-        if (key_start + key_len + sizeof(uint64_t) > size_) { return; }
+            static_cast<size_t>(key_off) + sizeof(uint32_t);
+        if (key_start + key_len + sizeof(uint64_t) > block_size_) { return; }
     }
 
     valid_ = true;
@@ -68,19 +83,19 @@ IndexBlockEntry IndexBlockReader::entry(size_t index) const {
     assert(index < slot_count_);
 
     const char *slot = data_ + kIndexHeaderSize + index * kIndexSlotSize;
-    const uint16_t key_off = decode_fixed_16(slot);
+    const uint32_t key_off = decode_fixed_32(slot);
     const char *payload = data_ + key_off;
-    const uint16_t key_len = decode_fixed_16(payload);
+    const uint32_t key_len = decode_fixed_32(payload);
 
     IndexBlockEntry result;
-    result.key = std::string_view(payload + sizeof(uint16_t), key_len);
+    result.key = std::string_view(payload + sizeof(uint32_t), key_len);
     result.handle.type =
         static_cast<ValueType>(static_cast<uint8_t>(slot[kSlotTypeOff]));
     result.handle.flag =
         static_cast<ValueFlag>(static_cast<uint8_t>(slot[kSlotFlagOff]));
     result.handle.data_size = decode_fixed_32(slot + kSlotDataSizeOff);
     result.handle.offset = decode_fixed_64(slot + kSlotGlobalOffsetOff);
-    result.timestamp = decode_fixed_64(payload + sizeof(uint16_t) + key_len);
+    result.timestamp = decode_fixed_64(payload + sizeof(uint32_t) + key_len);
     return result;
 }
 
@@ -193,8 +208,8 @@ class IndexBlockIter : public Iterator {
     size_t index_;
     std::string_view key_;
     std::string_view value_;
-    // Backing storage for value_; stable because the iterator is neither
-    // copyable nor movable.
+    // Backing storage for value_.  Stable because the iterator is not copyable
+    // or movable.
     char value_buf_[kIndexValueSize]{};
 };
 

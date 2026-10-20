@@ -22,36 +22,53 @@
 
 namespace ANCHORDB_NAMESPACE {
 
-// A bidirectional iterator over an ordered key-value store. Keys are
-// returned in ascending order, and the same iterator may not be used
-// concurrently from multiple threads.
+// A bidirectional iterator over an ordered key-value store.
+//
+// Keys are visited in ascending order.  After seeking, the iterator may be at
+// an invalid position (valid() == false), so always check valid() before
+// reading key()/value().  An iterator is not thread-safe: a single iterator may
+// not be used concurrently from multiple threads.  The iterator owns the
+// returned key/value storage, so those views are valid only until the iterator
+// is repositioned or destroyed.
 class ANCHORDB_EXPORT Iterator {
   public:
     Iterator();
 
-    // Iterators are not copyable; use the factory functions below or
-    // obtain one from the owning database.
+    // Iterators are not copyable; obtain one from the owning store or from the
+    // factory functions below.
     Iterator(const Iterator &) = delete;
     Iterator &operator=(const Iterator &) = delete;
 
     virtual ~Iterator();
-    // Returns true if the iterator is currently positioned at a valid entry.
+
+    // Returns true if the iterator currently points at a valid entry.
     virtual bool valid() const = 0;
+    // Positions at the first entry, or invalidates the iterator if empty.
     virtual void seek_to_first() = 0;
+    // Positions at the last entry, or invalidates the iterator if empty.
     virtual void seek_to_last() = 0;
-    // Positions the iterator at the first key >= target.
+    // Positions at the first key >= target, or invalidates the iterator if
+    // there is none.
     virtual void seek(std::string_view target) = 0;
+    // Advances to the next entry; invalidates the iterator past the last.
+    // REQUIRES: valid() is true.
     virtual void next() = 0;
+    // Moves to the previous entry; invalidates the iterator before the first.
+    // REQUIRES: valid() is true.
     virtual void prev() = 0;
-    // The following accessors require valid() to be true.
+    // Returns the current key.  REQUIRES: valid() is true.
     virtual std::string_view key() const = 0;
+    // Returns the current value.  REQUIRES: valid() is true.
     virtual std::string_view value() const = 0;
+    // Returns an error Status if iteration encountered a problem, or a
+    // success Status otherwise.
     virtual Status status() const = 0;
 };
 
-// Creates an iterator over an empty range.
+// Creates an iterator over an empty range (always invalid, success status).
 Iterator *new_empty_iterator();
-// Creates an iterator that immediately reports the given error via status().
+// Creates an iterator that is always invalid and reports `status` from
+// status().
 Iterator *new_error_iterator(const Status &status);
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE

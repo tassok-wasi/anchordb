@@ -12,6 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Defines ANCHORDB_NAMESPACE, the macro that wraps every public AnchorDB
+// declaration.  It defaults to `anchordb` but may be overridden at build time
+// (define ANCHORDB_NAMESPACE before including any AnchorDB header) so the whole
+// library can be relocated into another namespace.
+
 #pragma once
 
 #ifndef ANCHORDB_NAMESPACE

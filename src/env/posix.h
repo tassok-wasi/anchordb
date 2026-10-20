@@ -47,12 +47,11 @@ constexpr const int kOpenBaseFlags = 0;
 // and standard POSIX APIs.
 class PosixEnv : public Env {
   public:
-    // Default constructor — creates an environment with default settings.
     PosixEnv();
 
     // Constructs a PosixEnv with |max_open_files| limiting concurrent open
-    // file descriptors, |ring_entries| io_uring submission queue entries,
-    // and an optional |direct_io_enabled| flag for O_DIRECT on reads.
+    // file descriptors, |ring_entries| io_uring submission queue entries, and
+    // |direct_io| selecting O_DIRECT for reads and writes.
     PosixEnv(int max_open_files, uint32_t ring_entries, bool direct_io = false);
 
     // Constructs a PosixEnv and reports io_uring availability through the
@@ -135,9 +134,12 @@ class PosixEnv : public Env {
     // still applies; the readers/writers keep buffers and offsets aligned.
     // Thread-local rings are owned by their threads (see
     // get_thread_local_ring()), so this environment does not track them.
-#if HAS_IO_URING
-    struct io_uring default_ring_{};
-#endif
+    //
+    // The shared default ring is held by pointer, not by value, so that
+    // sizeof(PosixEnv) does not depend on HAS_IO_URING; a TU including this
+    // header without that private macro would otherwise disagree on the class
+    // size. nullptr when io_uring is unavailable or init failed.
+    struct io_uring *default_ring_ = nullptr;
     bool default_ring_valid_{false};
 
     // Background thread pool backing schedule(). Sized to the number of

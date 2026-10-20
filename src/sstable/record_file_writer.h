@@ -37,14 +37,10 @@ struct RecordLocation {
 // Append-only writer for the unified data-record format shared by data.bin and
 // the WiscKey value log (see sstable/data_record.h).
 //
-// The writer does not own `dest`; the caller opens it through Env (create with
-// new_writable_file_writer, or resume with new_appendable_file_writer) and
-// keeps it alive.  The writer only tracks the running append offset and frames
-// records, so it serves both lifecycles:
-//   - data.bin: one-shot during a flush, seal_size == 0.
-//   - vLog: long-lived and append-only; seal_size > 0 makes sealed() report
-//     true once the file should be rolled, leaving the roll policy to the
-//     caller.
+// The writer does not own `dest`; the caller opens it through Env and keeps it
+// alive.  It tracks the running append offset and frames records.  For a
+// long-lived vLog, seal_size > 0 makes sealed() report true once the file
+// should be rolled; the roll policy is left to the caller.
 class RecordFileWriter {
   public:
     // `initial_size` seeds the offset for an appendable (resumed) file; pass 0

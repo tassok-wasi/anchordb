@@ -36,6 +36,9 @@
 
 namespace ANCHORDB_NAMESPACE {
 
+// LIRS (Low Inter-reference Recency Set) cache.  Stack S orders blocks by
+// reuse distance and queue Q holds resident HIR blocks; LIR capacity is 95% of
+// the total.
 class LIRSCache {
   public:
     explicit LIRSCache(size_t capacity = 0, MapType t = MapType::Swiss)
@@ -52,8 +55,7 @@ class LIRSCache {
         case MapType::RobbinHood:
             map_.emplace<RobinHoodMap<LIRSHandle *>>(capacity_);
             break;
-        case MapType::Swiss:
-            map_.emplace<SwissMap<LIRSHandle *>>(capacity_);
+        case MapType::Swiss: map_.emplace<SwissMap<LIRSHandle *>>(capacity_);
         }
     }
     // Frees every entry still held by the cache. Callers must have released
@@ -138,6 +140,8 @@ class LIRSCache {
         map_;
 };
 
+// Shards a LIRS cache across kNumShards independent sub-caches, picking the
+// shard from the top hash bits.
 class ShardedLIRSCache : public Cache {
   public:
     explicit ShardedLIRSCache(size_t capacity, MapType t) : last_id_(0) {
@@ -184,9 +188,7 @@ class ShardedLIRSCache : public Cache {
     }
 
     void prune() override {
-        for (int s = 0; s < kNumShards; s++) {
-            shard_[s].prune();
-        }
+        for (int s = 0; s < kNumShards; s++) { shard_[s].prune(); }
     }
 
     size_t total_charge() const override {
@@ -212,4 +214,4 @@ class ShardedLIRSCache : public Cache {
     }
 };
 
-} // namespace anchordb
+} // namespace ANCHORDB_NAMESPACE
