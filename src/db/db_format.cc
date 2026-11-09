@@ -31,7 +31,7 @@ bool parse_internal_key(std::string_view internal_key,
     const size_t n = internal_key.size();
     if (n < 8) return false;
 
-    uint64_t num = decode_fixed_64(internal_key.data());
+    uint64_t num = decode_fixed_64(internal_key.data() + n - 8);
     uint8_t c = num & 0xff;
     result->sequence = num >> 8;
     result->type = static_cast<ValueType>(c);

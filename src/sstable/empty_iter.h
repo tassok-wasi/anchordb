@@ -57,13 +57,4 @@ class EmptyIterator : public Iterator {
     Status status_;
 };
 
-// Creates an empty iterator with an OK status.
-inline Iterator *new_empty_iterator() {
-    return new EmptyIterator(Status::ok());
-}
-// Creates an invalid iterator carrying the given error status.
-inline Iterator *new_error_iterator(const Status &status) {
-    return new EmptyIterator(status);
-}
-
 } // namespace ANCHORDB_NAMESPACE

@@ -9,6 +9,6 @@ readorder
 .vscode/
 .zed/
 .rules
-AGENTS.md
 ARCHITECTURE.md
 sstable_review.md
+SUBSYSTEM_AUDIT.md

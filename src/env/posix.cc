@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "env/posix.h"
 #include "anchordb/env.h"
 #include "anchordb/status.h"
 #include "env/env_default.h"
-#include "env/posix.h"
 #include "file/random_access_reader.h"
 #include "file/sequential_reader.h"
 #include "file/writer.h"
@@ -238,7 +238,10 @@ Status PosixEnv::new_appendable_file_writer(const std::string &filename,
 
     uint64_t file_size = 0;
     Status s = get_file_size(filename, &file_size);
-    if (!s.is_ok()) { return s; }
+    if (!s.is_ok()) {
+        ::close(fd);
+        return s;
+    }
 
     *result = new PosixWritableFileWriter(filename, fd, ring, &buf, direct_io_,
                                           file_size);

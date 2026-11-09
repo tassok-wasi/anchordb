@@ -216,13 +216,13 @@ check_cxx_symbol_exists(fdatasync "unistd.h" HAS_FDATASYNC)
 check_cxx_symbol_exists(F_FULLFSYNC "fcntl.h" HAS_FULLFSYNC)
 check_cxx_symbol_exists(O_CLOEXEC "fcntl.h" HAS_O_CLOEXEC)
 
-if (HAVE_FDATASYNC)
+if (HAS_FDATASYNC)
     target_compile_definitions(anchordb PRIVATE HAS_FDATASYNC=1)
-elseif(HAVE_FULLFSYNC)
+elseif(HAS_FULLFSYNC)
     target_compile_definitions(anchordb PRIVATE HAS_FULLFSYNC=1)
 endif()
 
-if (HAVE_O_CLOEXEC)
+if (HAS_O_CLOEXEC)
     target_compile_definitions(anchordb PRIVATE HAS_O_CLOEXEC=1)
 endif()
 

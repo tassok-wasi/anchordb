@@ -14,10 +14,17 @@
 
 #include "anchordb/iterator.h"
 #include "anchordb/anchordb_namespace.h"
+#include "sstable/empty_iter.h"
 
 namespace ANCHORDB_NAMESPACE {
 
 Iterator::Iterator() = default;
 Iterator::~Iterator() = default;
+
+Iterator *new_empty_iterator() { return new EmptyIterator(Status::ok()); }
+
+Iterator *new_error_iterator(const Status &status) {
+    return new EmptyIterator(status);
+}
 
 } // namespace ANCHORDB_NAMESPACE
